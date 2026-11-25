@@ -1,0 +1,647 @@
+{% extends 'unfold/layouts/skeleton.html' %}
+{% load i18n static unfold %}
+
+{% block title %}Administrator Portal | AttendX • University of Cape Coast{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    {{ form.media }}
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* =====================================================================
+           6. FULL-SCREEN UNIVERSITY OF CAPE COAST ENTRANCE PHOTOGRAPH
+           ===================================================================== */
+        .atx-login-page {
+            min-height: 100vh;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+            background-color: #06132b;
+            background-image:
+                linear-gradient(
+                    180deg,
+                    rgba(5, 22, 60, 0.45) 0%,
+                    rgba(10, 38, 92, 0.04) 24%,
+                    rgba(7, 22, 54, 0.08) 55%,
+                    rgba(4, 13, 34, 0.55) 100%
+                ),
+                url("{% static 'images/ucc-authentic-entrance.jpg' %}");
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center center;
+            color: #ffffff;
+        }
+
+        /* Top Bar */
+        .atx-topbar {
+            width: 100%;
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 28px 38px 12px 38px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+        }
+        .atx-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: #ffffff;
+            transition: transform 0.2s ease;
+        }
+        .atx-brand:hover {
+            transform: translateY(-1px);
+        }
+        .atx-brand-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 15px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(239, 246, 255, 0.9) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.65);
+            box-shadow:
+                0 10px 25px -5px rgba(6, 20, 48, 0.45),
+                inset 0 1px 1px rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            padding: 5px;
+        }
+        .atx-brand-title {
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            color: #ffffff;
+            line-height: 1.05;
+            text-shadow: 0 2px 12px rgba(2, 6, 23, 0.45);
+        }
+        .atx-brand-sub {
+            font-size: 13px;
+            font-weight: 500;
+            color: #e0f2fe;
+            margin-top: 3px;
+            text-shadow: 0 1px 8px rgba(2, 6, 23, 0.45);
+        }
+        .atx-tagline {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            text-shadow: 0 2px 10px rgba(2, 6, 23, 0.5);
+        }
+        .atx-tagline-line1 {
+            font-size: 15.5px;
+            font-style: italic;
+            font-weight: 500;
+            color: #f0f9ff;
+            line-height: 1.35;
+        }
+        .atx-tagline-line2 {
+            font-size: 15.5px;
+            font-style: italic;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.35;
+        }
+        .atx-tagline-bar {
+            width: 58px;
+            height: 2.5px;
+            background: linear-gradient(90deg, rgba(147, 197, 253, 0.2), #60a5fa);
+            border-radius: 99px;
+            margin-top: 6px;
+        }
+
+        /* Center Viewport Container */
+        .atx-main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 18px 28px 18px;
+            z-index: 10;
+        }
+
+        /* =====================================================================
+           1. APPLE LIQUID GLASS / GLASSMORPHISM CARD
+           ===================================================================== */
+        @keyframes atxGlassEntrance {
+            0% {
+                opacity: 0;
+                transform: translateY(18px) scale(0.985);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .atx-liquid-glass-card {
+            position: relative;
+            width: 100%;
+            max-width: 432px;
+            border-radius: 28px;
+            padding: 38px 36px 30px 36px;
+            /* Ultra-clear see-through Apple Liquid Glass background */
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.14) 0%,
+                rgba(255, 255, 255, 0.04) 45%,
+                rgba(8, 22, 52, 0.16) 100%
+            );
+            backdrop-filter: blur(8px) saturate(150%);
+            -webkit-backdrop-filter: blur(8px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.38);
+            box-shadow:
+                0 24px 60px -12px rgba(2, 8, 24, 0.45),
+                inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.55),
+                inset 0 -1px 1px 0 rgba(255, 255, 255, 0.18),
+                inset 1px 0 1px 0 rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+            animation: atxGlassEntrance 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+            overflow: hidden;
+        }
+
+        /* Specular top glass highlight sheen */
+        .atx-liquid-glass-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 10%;
+            right: 10%;
+            height: 1px;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.78) 50%,
+                transparent 100%
+            );
+            pointer-events: none;
+        }
+
+        /* Subtle ambient internal light reflection */
+        .atx-liquid-glass-card::after {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(
+                circle at 26% 18%,
+                rgba(255, 255, 255, 0.12) 0%,
+                rgba(96, 165, 250, 0.05) 26%,
+                transparent 55%
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .atx-liquid-glass-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.34);
+            box-shadow:
+                0 38px 80px -12px rgba(2, 8, 24, 0.74),
+                0 14px 32px -8px rgba(15, 40, 95, 0.48),
+                inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.52),
+                inset 0 -1px 1px 0 rgba(148, 163, 184, 0.2);
+        }
+
+        .atx-card-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* =====================================================================
+           2. AUTHENTIC OFFICIAL UCC INSTITUTIONAL CREST & HEADER
+           ===================================================================== */
+        .atx-crest-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .atx-official-crest-img {
+            width: 36px;
+            height: 42px;
+            object-fit: contain;
+            flex-shrink: 0;
+            filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+        }
+        .atx-crest-text {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+            text-shadow: 0 1px 8px rgba(2, 8, 23, 0.45);
+        }
+        .atx-portal-title {
+            font-size: 28px;
+            font-weight: 800;
+            color: #ffffff;
+            text-align: center;
+            letter-spacing: -0.025em;
+            margin: 0 0 6px 0;
+            text-shadow: 0 2px 12px rgba(2, 8, 23, 0.45);
+        }
+        .atx-portal-sub {
+            font-size: 13.5px;
+            font-weight: 400;
+            color: rgba(226, 232, 240, 0.92);
+            text-align: center;
+            margin: 0 0 26px 0;
+        }
+
+        /* =====================================================================
+           4. LIQUID GLASS INPUT FIELDS
+           ===================================================================== */
+        .atx-field-group {
+            position: relative;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        .atx-field-icon-left {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(226, 232, 240, 0.78);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            transition: color 0.2s ease;
+        }
+        .atx-input {
+            width: 100%;
+            height: 49px;
+            background: rgba(8, 20, 48, 0.22);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow:
+                inset 0 1px 2px rgba(2, 6, 23, 0.18),
+                0 1px 0 rgba(255, 255, 255, 0.14);
+            border-radius: 13px;
+            padding: 0 44px 0 45px;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+            outline: none;
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .atx-input::placeholder {
+            color: rgba(255, 255, 255, 0.85);
+            font-weight: 500;
+        }
+        .atx-input:hover {
+            border-color: rgba(255, 255, 255, 0.52);
+            background: rgba(10, 25, 58, 0.30);
+        }
+        .atx-input:focus {
+            background: rgba(10, 26, 60, 0.38);
+            border-color: rgba(147, 197, 253, 0.95);
+            box-shadow:
+                0 0 0 3.5px rgba(59, 130, 246, 0.32),
+                inset 0 1px 1px rgba(255, 255, 255, 0.3);
+        }
+        .atx-field-group:focus-within .atx-field-icon-left {
+            color: #93c5fd;
+        }
+        .atx-eye-btn {
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: rgba(203, 213, 225, 0.75);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.18s ease, background 0.18s ease;
+        }
+        .atx-eye-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Remember Me & Forgot Password */
+        .atx-meta-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 15px 0 22px 0;
+            font-size: 13px;
+        }
+        .atx-remember {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: rgba(241, 245, 249, 0.92);
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .atx-remember input {
+            width: 16px;
+            height: 16px;
+            border-radius: 5px;
+            accent-color: #2563eb;
+            cursor: pointer;
+        }
+        .atx-forgot {
+            color: #93c5fd;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.18s ease;
+        }
+        .atx-forgot:hover {
+            color: #bfdbfe;
+            text-decoration: underline;
+        }
+
+        /* =====================================================================
+           5. MODERN ROYAL BLUE GRADIENT SIGN-IN BUTTON
+           ===================================================================== */
+        .atx-submit-btn {
+            width: 100%;
+            height: 50px;
+            border: 1px solid rgba(147, 197, 253, 0.38);
+            border-radius: 13px;
+            background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%);
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            cursor: pointer;
+            box-shadow:
+                0 12px 28px -4px rgba(37, 99, 235, 0.68),
+                inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .atx-submit-btn:hover {
+            transform: translateY(-1.5px);
+            box-shadow:
+                0 16px 34px -4px rgba(37, 99, 235, 0.85),
+                inset 0 1px 0 rgba(255, 255, 255, 0.45);
+            filter: brightness(1.07);
+        }
+        .atx-submit-btn:active {
+            transform: translateY(0.5px) scale(0.995);
+        }
+
+        @keyframes atxSpin {
+            to { transform: rotate(360deg); }
+        }
+        .atx-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2.4px solid rgba(255, 255, 255, 0.35);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: atxSpin 0.7s linear infinite;
+            display: none;
+        }
+
+        /* Card Footer Divider */
+        .atx-card-footer {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.16);
+            text-align: center;
+            font-size: 12px;
+            font-weight: 500;
+            color: rgba(226, 232, 240, 0.78);
+            letter-spacing: 0.01em;
+        }
+
+        /* Glass Error Alert */
+        .atx-error-box {
+            background: rgba(153, 27, 27, 0.58);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(252, 165, 165, 0.45);
+            border-radius: 13px;
+            padding: 12px 15px;
+            margin-bottom: 18px;
+            font-size: 12.5px;
+            color: #fee2e2;
+        }
+
+        .atx-wave-bottom {
+            width: 100%;
+            height: 54px;
+            display: block;
+            z-index: 5;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .atx-topbar {
+                padding: 20px 20px 8px 20px;
+            }
+            .atx-tagline {
+                display: none;
+            }
+            .atx-liquid-glass-card {
+                padding: 30px 22px 24px 22px;
+                border-radius: 24px;
+            }
+            .atx-portal-title {
+                font-size: 24px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block base %}
+<div class="atx-login-page">
+    <!-- Top Branding Bar: AttendX Logo + Smart Attendance. Better Learning. -->
+    <header class="atx-topbar">
+        <a href="http://localhost:5173/" class="atx-brand">
+            <div class="atx-brand-icon">
+                <img
+                    src="{% static 'images/ucc-official-crest.png' %}"
+                    alt="University of Cape Coast Crest"
+                    style="width: 36px; height: 36px; object-fit: contain;"
+                />
+            </div>
+            <div>
+                <div class="atx-brand-title">AttendX</div>
+                <div class="atx-brand-sub">University of Cape Coast</div>
+            </div>
+        </a>
+
+        <div class="atx-tagline">
+            <span class="atx-tagline-line1">Smart Attendance.</span>
+            <span class="atx-tagline-line2">Better Learning.</span>
+            <span class="atx-tagline-bar"></span>
+        </div>
+    </header>
+
+    <!-- Center Apple Liquid Glass Login Panel -->
+    <main class="atx-main">
+        <div class="atx-liquid-glass-card">
+            <div class="atx-card-content">
+                <!-- Authentic Official University of Cape Coast Institutional Crest -->
+                <div class="atx-crest-row">
+                    <img
+                        src="{% static 'images/ucc-official-crest.png' %}"
+                        alt="Official University of Cape Coast Crest"
+                        class="atx-official-crest-img"
+                    />
+                    <span class="atx-crest-text">University of Cape Coast</span>
+                </div>
+
+                <h1 class="atx-portal-title">Administrator Portal</h1>
+                <p class="atx-portal-sub">Sign in to manage the AttendX platform</p>
+
+                {% if form.errors or form.non_field_errors %}
+                    <div class="atx-error-box">
+                        <strong style="display:block;margin-bottom:4px;color:#fecaca;">Authentication Failed</strong>
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                        {% for field in form %}
+                            {% for error in field.errors %}
+                                <div>{{ field.label }}: {{ error }}</div>
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if user.is_authenticated %}
+                    <div class="atx-error-box" style="background:rgba(120,53,15,0.62);border-color:rgba(251,191,36,0.45);color:#fef3c7;">
+                        Signed in as <strong>{{ username }}</strong> without admin privileges. Please sign in with an Administrator account.
+                    </div>
+                {% endif %}
+
+                <form
+                    action="{{ app_path }}"
+                    method="post"
+                    id="login-form"
+                    onsubmit="const btn = document.getElementById('atx-submit-btn'); const sp = document.getElementById('atx-spinner'); const ic = document.getElementById('atx-btn-icon'); const tx = document.getElementById('atx-btn-text'); if (btn) { btn.style.opacity = '0.92'; sp.style.display = 'inline-block'; ic.style.display = 'none'; tx.textContent = 'Signing In...'; }"
+                >
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ next }}">
+
+                    <!-- Email Address Liquid Glass Input -->
+                    <div class="atx-field-group">
+                        <span class="atx-field-icon-left">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                            </svg>
+                        </span>
+                        <input
+                            type="text"
+                            name="username"
+                            id="id_username"
+                            value="{{ form.username.value|default:'' }}"
+                            required
+                            autofocus
+                            autocomplete="username"
+                            placeholder="Email Address"
+                            class="atx-input"
+                        />
+                    </div>
+
+                    <!-- Password Liquid Glass Input with Show / Hide Eye Toggle -->
+                    <div class="atx-field-group">
+                        <span class="atx-field-icon-left">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </span>
+                        <input
+                            type="password"
+                            name="password"
+                            id="id_password"
+                            required
+                            autocomplete="current-password"
+                            placeholder="Password"
+                            class="atx-input"
+                        />
+                        <button
+                            type="button"
+                            class="atx-eye-btn"
+                            onclick="const p = document.getElementById('id_password'); const openEye = document.getElementById('atx-eye-open'); const closedEye = document.getElementById('atx-eye-closed'); if (p.type === 'password') { p.type = 'text'; openEye.style.display = 'none'; closedEye.style.display = 'block'; this.style.color = '#93c5fd'; } else { p.type = 'password'; openEye.style.display = 'block'; closedEye.style.display = 'none'; this.style.color = 'rgba(203, 213, 225, 0.75)'; }"
+                            title="Show / Hide Password"
+                            aria-label="Toggle password visibility"
+                        >
+                            <svg id="atx-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg id="atx-eye-closed" style="display:none;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+                                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+                                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+                                <line x1="2" x2="22" y1="2" y2="22"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Remember Me & Forgot Password -->
+                    <div class="atx-meta-row">
+                        <label class="atx-remember">
+                            <input type="checkbox" checked />
+                            <span>Remember me</span>
+                        </label>
+                        <a href="http://localhost:5173/forgot-password" class="atx-forgot">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <!-- Royal Blue Sign In Button with Loading State -->
+                    <button type="submit" id="atx-submit-btn" class="atx-submit-btn">
+                        <span id="atx-spinner" class="atx-spinner"></span>
+                        <svg id="atx-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                            <polyline points="10 17 15 12 10 7"/>
+                            <line x1="15" x2="3" y1="12" y2="12"/>
+                        </svg>
+                        <span id="atx-btn-text">Sign In</span>
+                    </button>
+                </form>
+
+                <div class="atx-card-footer">
+                    AttendX &bull; University of Cape Coast
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Royal Blue & White Decorative Wave Ribbon -->
+    <svg class="atx-wave-bottom" viewBox="0 0 1440 90" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0,15 C320,95 820,95 1440,25 L1440,90 L0,90 Z" fill="#1d4ed8" fill-opacity="0.85"/>
+        <path d="M0,45 C420,95 960,85 1440,5 L1440,90 L0,90 Z" fill="#2563eb"/>
+        <path d="M680,90 C1020,75 1250,45 1440,18 L1440,90 Z" fill="#eff6ff" fill-opacity="0.92"/>
+    </svg>
+</div>
+{% endblock %}

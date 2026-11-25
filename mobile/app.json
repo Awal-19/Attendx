@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "AttendX UCC",
+    "slug": "attendx-ucc",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/ucc-official-crest.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/ucc-official-crest.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#061430"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "gh.edu.ucc.attendx",
+      "infoPlist": {
+        "NSCameraUsageDescription": "AttendX uses the camera to scan classroom QR codes and perform facial identity verification for attendance."
+      }
+    },
+    "android": {
+      "package": "gh.edu.ucc.attendx",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#061430",
+        "foregroundImage": "./assets/ucc-official-crest.png"
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow AttendX UCC to access your camera for QR scanning and facial verification."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/ucc-official-crest.png",
+          "color": "#1d4ed8"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "web": {
+      "favicon": "./assets/ucc-official-crest.png"
+    }
+  }
+}

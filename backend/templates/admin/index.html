@@ -1,0 +1,577 @@
+{% extends 'admin/base.html' %}
+{% load i18n static unfold %}
+
+{% block title %}Dashboard | AttendX Administration • University of Cape Coast{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .atx-dash {
+            padding: 8px 12px 36px 12px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
+        }
+        .atx-welcome-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .atx-welcome-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+        .atx-welcome-sub {
+            font-size: 13.5px;
+            color: #64748b;
+            margin: 4px 0 0 0;
+        }
+        .atx-date-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 11px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #334155;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        .atx-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            margin-bottom: 24px;
+        }
+        .atx-kpi-card {
+            position: relative;
+            border-radius: 18px;
+            padding: 22px 22px 18px 22px;
+            color: #ffffff;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 155px;
+            transition: opacity 0.15s ease, box-shadow 0.15s ease;
+            overflow: hidden;
+        }
+        .atx-kpi-card:hover {
+            opacity: 0.96;
+        }
+        .atx-kpi-blue {
+            background: linear-gradient(135deg, #0f296b 0%, #1d4ed8 60%, #2563eb 100%);
+            box-shadow: 0 12px 24px -6px rgba(29, 78, 216, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .atx-kpi-purple {
+            background: linear-gradient(135deg, #991b1b 0%, #dc2626 60%, #ef4444 100%);
+            box-shadow: 0 12px 24px -6px rgba(220, 38, 38, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .atx-kpi-green {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 48%, #dc2626 100%);
+            box-shadow: 0 12px 24px -6px rgba(30, 58, 138, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .atx-kpi-orange {
+            background: linear-gradient(135deg, #ffffff 0%, #eff6ff 55%, #fef2f2 100%);
+            box-shadow: 0 12px 24px -6px rgba(15, 23, 42, 0.12);
+            border: 2px solid #1d4ed8;
+            color: #0f172a !important;
+        }
+        .atx-kpi-orange .atx-kpi-number,
+        .atx-kpi-orange .atx-kpi-label,
+        .atx-kpi-orange .atx-kpi-trend {
+            color: #1e3a8a !important;
+        }
+        .atx-kpi-orange .atx-kpi-icon {
+            background: linear-gradient(135deg, #1d4ed8 0%, #dc2626 100%) !important;
+        }
+        .atx-kpi-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.22);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+        .atx-kpi-number {
+            font-size: 32px;
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            color: #ffffff;
+        }
+        .atx-kpi-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.92);
+            margin-top: 3px;
+        }
+        .atx-kpi-trend {
+            margin-top: 12px;
+            font-size: 11.5px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.95);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .atx-charts-grid {
+            display: grid;
+            grid-template-columns: 7fr 4fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .atx-bottom-grid {
+            display: grid;
+            grid-template-columns: 7fr 5fr;
+            gap: 20px;
+        }
+        .atx-panel {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            padding: 22px 24px;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+        }
+        .atx-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .atx-panel-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0;
+        }
+        .atx-pill-tabs {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f1f5f9;
+            padding: 3px;
+            border-radius: 10px;
+            font-size: 11.5px;
+            font-weight: 700;
+        }
+        .atx-pill-tab {
+            padding: 4px 10px;
+            border-radius: 8px;
+            color: #64748b;
+        }
+        .atx-pill-tab.active {
+            background: #2563eb;
+            color: #ffffff;
+        }
+        .atx-activity-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f5f9;
+            gap: 12px;
+        }
+        .atx-activity-item:last-child {
+            border-bottom: none;
+        }
+        .atx-activity-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+        .atx-activity-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .atx-promo-card {
+            position: relative;
+            border-radius: 18px;
+            overflow: hidden;
+            padding: 26px;
+            min-height: 235px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            color: #ffffff;
+            background-color: #0b224a;
+            background-image:
+                linear-gradient(90deg, rgba(8, 25, 58, 0.94) 0%, rgba(12, 39, 88, 0.72) 55%, rgba(12, 39, 88, 0.2) 100%),
+                url("{% static 'images/ucc-library-complex.jpg' %}");
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.35);
+        }
+        .atx-learn-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 18px;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #0f172a;
+            font-size: 12.5px;
+            font-weight: 800;
+            text-decoration: none;
+            margin-top: 14px;
+            width: fit-content;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        .atx-learn-btn:hover {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        @media (max-width: 1100px) {
+            .atx-kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .atx-charts-grid,
+            .atx-bottom-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 600px) {
+            .atx-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="atx-dash">
+    <!-- Top Welcome Row -->
+    <div class="atx-welcome-row">
+        <div>
+            <h2 class="atx-welcome-title">
+                Welcome back, {{ request.user.full_name|default:"Administrator" }}! 👋
+            </h2>
+            <p class="atx-welcome-sub">
+                Here's what's happening with AttendX today ({{ attendx_stats.current_year }} &bull; {{ attendx_stats.current_semester }}).
+            </p>
+        </div>
+
+        <div class="atx-date-pill">
+            <span class="material-symbols-outlined" style="font-size:17px;color:#2563eb;">calendar_today</span>
+            <span>{{ attendx_stats.today_formatted }}</span>
+        </div>
+    </div>
+
+    <!-- 4 Vibrant Gradient KPI Cards matching the reference image -->
+    <div class="atx-kpi-grid">
+        <!-- 1. Total Students (Royal Blue) -->
+        <a href="{% url 'admin:students_studentprofile_changelist' %}" class="atx-kpi-card atx-kpi-blue">
+            <div>
+                <div class="atx-kpi-icon">
+                    <span class="material-symbols-outlined" style="font-size:24px;color:#ffffff;">groups</span>
+                </div>
+                <div class="atx-kpi-number">{{ attendx_stats.total_students }}</div>
+                <div class="atx-kpi-label">Total Students</div>
+            </div>
+            <div class="atx-kpi-trend">
+                <span>&uarr; {{ attendx_stats.total_enrollments }} Active Enrollments</span>
+            </div>
+        </a>
+
+        <!-- 2. Total Lecturers (Purple) -->
+        <a href="{% url 'admin:lecturers_lecturerprofile_changelist' %}" class="atx-kpi-card atx-kpi-purple">
+            <div>
+                <div class="atx-kpi-icon">
+                    <span class="material-symbols-outlined" style="font-size:24px;color:#ffffff;">co_present</span>
+                </div>
+                <div class="atx-kpi-number">{{ attendx_stats.total_lecturers }}</div>
+                <div class="atx-kpi-label">Total Lecturers</div>
+            </div>
+            <div class="atx-kpi-trend">
+                <span>&uarr; {{ attendx_stats.total_departments }} Academic Departments</span>
+            </div>
+        </a>
+
+        <!-- 3. Total Courses (Emerald Green) -->
+        <a href="{% url 'admin:academics_course_changelist' %}" class="atx-kpi-card atx-kpi-green">
+            <div>
+                <div class="atx-kpi-icon">
+                    <span class="material-symbols-outlined" style="font-size:24px;color:#ffffff;">menu_book</span>
+                </div>
+                <div class="atx-kpi-number">{{ attendx_stats.total_courses }}</div>
+                <div class="atx-kpi-label">Total Courses</div>
+            </div>
+            <div class="atx-kpi-trend">
+                <span>&uarr; {{ attendx_stats.total_programmes }} Degree Programmes</span>
+            </div>
+        </a>
+
+        <!-- 4. Attendance Sessions (Amber Orange) -->
+        <a href="{% url 'admin:attendance_attendancesession_changelist' %}" class="atx-kpi-card atx-kpi-orange">
+            <div>
+                <div class="atx-kpi-icon">
+                    <span class="material-symbols-outlined" style="font-size:24px;color:#ffffff;">event_available</span>
+                </div>
+                <div class="atx-kpi-number">{{ attendx_stats.total_sessions }}</div>
+                <div class="atx-kpi-label">Attendance Sessions</div>
+            </div>
+            <div class="atx-kpi-trend">
+                <span>&uarr; {{ attendx_stats.present_students }} Present Students</span>
+            </div>
+        </a>
+    </div>
+
+    <!-- Middle Analytics Section: Attendance Overview Line Chart + Attendance Rate Donut -->
+    <div id="attendx-analytics" class="atx-charts-grid">
+        <!-- Left Panel: Attendance Overview -->
+        <div class="atx-panel">
+            <div class="atx-panel-header">
+                <h3 class="atx-panel-title">
+                    <span class="material-symbols-outlined" style="color:#2563eb;font-size:20px;">bar_chart</span>
+                    <span>Attendance Overview</span>
+                </h3>
+                <div class="atx-pill-tabs">
+                    <span class="atx-pill-tab">7D</span>
+                    <span class="atx-pill-tab active">30D</span>
+                    <span class="atx-pill-tab">3M</span>
+                    <span class="atx-pill-tab">1Y</span>
+                </div>
+            </div>
+            <div style="position:relative;height:240px;width:100%;">
+                <canvas id="attendxOverviewChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Panel: Attendance Rate Donut -->
+        <div class="atx-panel" style="display:flex;flex-direction:column;justify-content:space-between;">
+            <div class="atx-panel-header">
+                <h3 class="atx-panel-title">
+                    <span class="material-symbols-outlined" style="color:#2563eb;font-size:20px;">donut_large</span>
+                    <span>Attendance Rate</span>
+                </h3>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-around;gap:14px;margin:auto 0;">
+                <div style="position:relative;width:170px;height:170px;">
+                    <canvas id="attendxDonutChart"></canvas>
+                    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">
+                        <span style="font-size:24px;font-weight:800;color:#0f172a;">{{ attendx_stats.attendance_rate }}%</span>
+                        <span style="font-size:11px;font-weight:600;color:#64748b;">Overall Rate</span>
+                    </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:14px;font-size:13px;">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:7px;color:#64748b;font-weight:600;">
+                            <span style="width:10px;height:10px;border-radius:99px;background:#2563eb;display:inline-block;"></span>
+                            <span>Present</span>
+                        </div>
+                        <div style="font-weight:800;color:#0f172a;font-size:15px;margin-left:17px;margin-top:2px;">
+                            {{ attendx_stats.attendance_rate }}%
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex;align-items:center;gap:7px;color:#64748b;font-weight:600;">
+                            <span style="width:10px;height:10px;border-radius:99px;background:#e2e8f0;display:inline-block;"></span>
+                            <span>Absent</span>
+                        </div>
+                        <div style="font-weight:800;color:#64748b;font-size:15px;margin-left:17px;margin-top:2px;">
+                            {{ attendx_stats.absent_rate }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Section: Recent Activities + AttendX UCC Campus Card -->
+    <div class="atx-bottom-grid">
+        <!-- Left Panel: Recent Activities -->
+        <div class="atx-panel">
+            <div class="atx-panel-header">
+                <h3 class="atx-panel-title">
+                    <span class="material-symbols-outlined" style="color:#2563eb;font-size:20px;">bolt</span>
+                    <span>Recent Activities</span>
+                </h3>
+                <a href="{% url 'admin:attendance_auditlog_changelist' %}" style="font-size:12.5px;font-weight:700;color:#2563eb;text-decoration:none;">
+                    View All &rarr;
+                </a>
+            </div>
+
+            <div>
+                {% for st in recent_students|slice:":1" %}
+                    <div class="atx-activity-item">
+                        <div class="atx-activity-left">
+                            <div class="atx-activity-icon" style="background:#dcfce7;color:#15803d;">
+                                <span class="material-symbols-outlined" style="font-size:20px;">person_add</span>
+                            </div>
+                            <div>
+                                <div style="font-size:13.5px;font-weight:700;color:#0f172a;">New student registered</div>
+                                <div style="font-size:12px;color:#64748b;">{{ st.index_number }} &ndash; {{ st.user.full_name }}</div>
+                            </div>
+                        </div>
+                        <span style="font-size:11.5px;color:#94a3b8;white-space:nowrap;">{{ st.created_at|timesince }} ago</span>
+                    </div>
+                {% endfor %}
+
+                {% for sess in recent_sessions|slice:":1" %}
+                    <div class="atx-activity-item">
+                        <div class="atx-activity-left">
+                            <div class="atx-activity-icon" style="background:#dbeafe;color:#1d4ed8;">
+                                <span class="material-symbols-outlined" style="font-size:20px;">event_note</span>
+                            </div>
+                            <div>
+                                <div style="font-size:13.5px;font-weight:700;color:#0f172a;">Attendance session created</div>
+                                <div style="font-size:12px;color:#64748b;">{{ sess.course.code }} &ndash; {{ sess.course.title }}</div>
+                            </div>
+                        </div>
+                        <span style="font-size:11.5px;color:#94a3b8;white-space:nowrap;">{{ sess.created_at|timesince }} ago</span>
+                    </div>
+                {% endfor %}
+
+                {% for rec in recent_records|slice:":1" %}
+                    <div class="atx-activity-item">
+                        <div class="atx-activity-left">
+                            <div class="atx-activity-icon" style="background:#f3e8ff;color:#6d28d9;">
+                                <span class="material-symbols-outlined" style="font-size:20px;">fact_check</span>
+                            </div>
+                            <div>
+                                <div style="font-size:13.5px;font-weight:700;color:#0f172a;">New attendance recorded</div>
+                                <div style="font-size:12px;color:#64748b;">{{ rec.student.student_profile.index_number|default:"UCC" }} &ndash; {{ rec.student.full_name }}</div>
+                            </div>
+                        </div>
+                        <span style="font-size:11.5px;color:#94a3b8;white-space:nowrap;">{{ rec.timestamp|timesince }} ago</span>
+                    </div>
+                {% endfor %}
+
+                {% for c in recent_courses|slice:":1" %}
+                    <div class="atx-activity-item">
+                        <div class="atx-activity-left">
+                            <div class="atx-activity-icon" style="background:#d1fae5;color:#047857;">
+                                <span class="material-symbols-outlined" style="font-size:20px;">menu_book</span>
+                            </div>
+                            <div>
+                                <div style="font-size:13.5px;font-weight:700;color:#0f172a;">New course added</div>
+                                <div style="font-size:12px;color:#64748b;">{{ c.code }} &ndash; {{ c.title }}</div>
+                            </div>
+                        </div>
+                        <span style="font-size:11.5px;color:#94a3b8;white-space:nowrap;">{{ c.created_at|timesince }} ago</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right Panel: AttendX Building a smarter university experience Promo Card -->
+        <div class="atx-promo-card">
+            <div style="max-width:260px;">
+                <div style="width:28px;height:28px;border-radius:99px;background:#2563eb;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;color:#ffffff;">check</span>
+                </div>
+                <div style="font-size:26px;font-weight:800;letter-spacing:-0.02em;line-height:1.1;">AttendX</div>
+                <div style="font-size:14px;color:#dbeafe;margin-top:6px;line-height:1.4;">
+                    Building a smarter university experience
+                </div>
+                <a href="http://localhost:5173/" target="_blank" class="atx-learn-btn">
+                    <span>Learn More</span>
+                    <span>&rarr;</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const labels = {{ chart_labels_json|safe }};
+    const rates = {{ chart_rates_json|safe }};
+    const presentRate = Number("{{ attendx_stats.attendance_rate }}") || 0;
+    const absentRate = Number("{{ attendx_stats.absent_rate }}") || (100 - presentRate);
+
+    const overviewCtx = document.getElementById("attendxOverviewChart");
+    if (overviewCtx && window.Chart) {
+        new Chart(overviewCtx, {
+            type: "line",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "Attendance Rate (%)",
+                        data: rates,
+                        borderColor: "#2563eb",
+                        backgroundColor: "rgba(37, 99, 235, 0.14)",
+                        borderWidth: 2.5,
+                        pointBackgroundColor: "#1d4ed8",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.35,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function (val) { return val + "%"; },
+                        },
+                        grid: { color: "rgba(148, 163, 184, 0.15)" },
+                    },
+                    x: {
+                        grid: { display: false },
+                    },
+                },
+            },
+        });
+    }
+
+    const donutCtx = document.getElementById("attendxDonutChart");
+    if (donutCtx && window.Chart) {
+        new Chart(donutCtx, {
+            type: "doughnut",
+            data: {
+                labels: ["Present", "Absent"],
+                datasets: [
+                    {
+                        data: [presentRate > 0 ? presentRate : 1, absentRate > 0 ? absentRate : 0],
+                        backgroundColor: ["#1d4ed8", "#dc2626"],
+                        borderWidth: 0,
+                        cutout: "74%",
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+            },
+        });
+    }
+});
+</script>
+{% endblock %}

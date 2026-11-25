@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: attendx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: attendx_db
+      POSTGRES_USER: attendx_user
+      POSTGRES_PASSWORD: attendx_secure_password_2026
+    ports:
+      - "5434:5432"
+    volumes:
+      - attendx_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendx_user -d attendx_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  attendx_pgdata:
+
