@@ -34,6 +34,18 @@ const RoleLoginShell = ({
   forgotPasswordPath,
   pageTitle,
   noindex = false,
+  customRootClass = '',
+  customThemeCss = '',
+  backgroundNode = null,
+  footerLogoSrc = '',
+  footerLogoAlt = 'University of Cape Coast crest',
+  cardClassName = '',
+  inputClassName = '',
+  forgotLinkClassName = '',
+  checkboxClassName = '',
+  registerButtonClassName = '',
+  submitButtonClassName = '',
+  headerClassName = '',
 }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -100,7 +112,8 @@ const RoleLoginShell = ({
   };
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col justify-between py-8 px-4 sm:px-6 lg:px-8 overflow-x-hidden bg-[#061430] selection:bg-blue-600 selection:text-white">
+    <div className={`relative min-h-screen w-full flex flex-col justify-between py-8 px-4 sm:px-6 lg:px-8 overflow-x-hidden bg-[#061430] selection:bg-blue-600 selection:text-white ${customRootClass}`}>
+      {backgroundNode}
       <style>{`
         .ucc-role-glass-card {
           background: linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(15,34,78,0.42) 48%, rgba(7,17,42,0.58) 100%);
@@ -119,16 +132,17 @@ const RoleLoginShell = ({
           border-color: ${focusRingColor};
           box-shadow: 0 0 0 3px ${focusRingColor}44;
         }
+        ${customThemeCss}
       `}</style>
 
       {/* Top Navigation */}
       <header className="relative z-10 max-w-6xl w-full mx-auto flex items-center justify-between">
         <Link
           to="/"
-          className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0a1838]/60 border border-white/20 backdrop-blur-md transition hover:scale-[1.02]"
+          className={`inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0a1838]/60 border border-white/20 backdrop-blur-md transition hover:scale-[1.02] ${headerClassName}`}
         >
           <div className="w-8 h-8 rounded-lg bg-white/95 p-1 flex items-center justify-center">
-            <img src="/images/ucc-official-crest.png" alt="UCC Crest" className="w-full h-full object-contain" />
+            <img src="/images/ucc-official-crest.png" alt="University of Cape Coast crest" className="w-full h-full object-contain" />
           </div>
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: buttonGradient }}>
             <QrCode className="w-3.5 h-3.5" />
@@ -143,9 +157,9 @@ const RoleLoginShell = ({
 
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white/95 hover:text-white bg-[#0a1838]/55 border border-white/20 transition"
+          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white/95 hover:text-white bg-[#0a1838]/55 border border-white/20 transition ${headerClassName}`}
         >
-          <ArrowLeft className="w-3.5 h-3.5 text-blue-300" />
+          <ArrowLeft className="w-3.5 h-3.5 text-amber-300" />
           <span>Home</span>
         </Link>
       </header>
@@ -153,7 +167,7 @@ const RoleLoginShell = ({
       {/* Centered Card */}
       <main className="relative z-10 flex-1 flex items-center justify-center my-6">
         <div className="w-full max-w-[445px]">
-          <div className="ucc-role-glass-card relative rounded-3xl p-7 sm:p-9 overflow-hidden">
+          <div className={`ucc-role-glass-card relative rounded-3xl p-7 sm:p-9 overflow-hidden ${cardClassName}`}>
             <div className="absolute top-0 inset-x-0 h-[3px]" style={{ background: accentGradient }} />
 
             <div className="text-center mb-6">
@@ -237,7 +251,7 @@ const RoleLoginShell = ({
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder={identifierPlaceholder}
-                    className="ucc-role-input w-full h-12 pl-10 pr-4 rounded-xl text-white placeholder-blue-100/45 text-sm font-medium"
+                    className={`ucc-role-input w-full h-12 pl-10 pr-4 rounded-xl text-white placeholder-blue-100/45 text-sm font-medium ${inputClassName}`}
                   />
                 </div>
               </div>
@@ -254,7 +268,7 @@ const RoleLoginShell = ({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="ucc-role-input w-full h-12 pl-10 pr-11 rounded-xl text-white placeholder-blue-100/45 text-sm font-medium"
+                    className={`ucc-role-input w-full h-12 pl-10 pr-11 rounded-xl text-white placeholder-blue-100/45 text-sm font-medium ${inputClassName}`}
                   />
                   <button
                     type="button"
@@ -273,13 +287,13 @@ const RoleLoginShell = ({
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                    className={`w-4 h-4 rounded accent-blue-600 cursor-pointer ${checkboxClassName}`}
                   />
                   <span>Remember me</span>
                 </label>
                 <Link
                   to={forgotPasswordPath}
-                  className="text-blue-300 hover:text-white font-semibold underline underline-offset-4 transition-colors"
+                  className={`text-blue-300 hover:text-white font-semibold underline underline-offset-4 transition-colors ${forgotLinkClassName}`}
                 >
                   Forgot password?
                 </Link>
@@ -289,7 +303,7 @@ const RoleLoginShell = ({
                 <button
                   type="submit"
                   disabled={submitting || isDifferentRole}
-                  className="w-full h-12 rounded-xl text-white font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 disabled:opacity-55 cursor-pointer shadow-lg transition hover:brightness-110"
+                  className={`w-full h-12 rounded-xl text-white font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 disabled:opacity-55 cursor-pointer shadow-lg transition hover:brightness-110 ${submitButtonClassName}`}
                   style={{ background: buttonGradient }}
                 >
                   {submitting ? (
@@ -313,15 +327,23 @@ const RoleLoginShell = ({
                 <div className="text-center">
                   <Link
                     to={registerLink.to}
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white/95 hover:text-white bg-white/10 hover:bg-white/15 border border-white/20 transition"
+                    className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white/95 hover:text-white bg-white/10 hover:bg-white/15 border border-white/20 transition ${registerButtonClassName}`}
                   >
                     <span>{registerLink.label}</span>
                   </Link>
                 </div>
               )}
 
-              <div className="flex items-center justify-center gap-1.5 text-[11px] text-blue-200/75 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
+              <div className="flex items-center justify-center gap-2 text-[11px] text-white/85 font-medium">
+                {footerLogoSrc ? (
+                  <img
+                    src={footerLogoSrc}
+                    alt={footerLogoAlt}
+                    className="w-[22px] h-[22px] object-contain shrink-0 drop-shadow"
+                  />
+                ) : (
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
+                )}
                 <span>AttendX • University of Cape Coast</span>
               </div>
             </div>

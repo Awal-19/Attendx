@@ -1,0 +1,147 @@
+.ucc-theme-root {
+  --ucc-red: #b91c1c;
+  --ucc-blue: #1e3a8a;
+  --ucc-gold: #f59e0b;
+  --ucc-white: #ffffff;
+  background: linear-gradient(135deg, #2a0a12 0%, #0b1a3d 52%, #1a1508 100%);
+}
+
+.ucc-header-glass {
+  background: rgba(10, 22, 52, 0.48) !important;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-color: rgba(255, 255, 255, 0.26) !important;
+  box-shadow: 0 12px 28px -8px rgba(2, 6, 23, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.ucc-liquid-glass {
+  border-radius: 28px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(30, 58, 138, 0.34) 45%,
+    rgba(127, 29, 29, 0.28) 85%,
+    rgba(245, 158, 11, 0.10) 100%
+  );
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-top-color: rgba(255, 255, 255, 0.48);
+  border-left-color: rgba(255, 255, 255, 0.42);
+  box-shadow:
+    0 32px 72px -16px rgba(2, 6, 23, 0.78),
+    0 0 36px -12px rgba(245, 158, 11, 0.22),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.10);
+}
+
+.ucc-liquid-glass--lecturer {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(30, 58, 138, 0.32) 42%,
+    rgba(180, 83, 9, 0.22) 78%,
+    rgba(127, 29, 29, 0.24) 100%
+  );
+  box-shadow:
+    0 32px 72px -16px rgba(2, 6, 23, 0.78),
+    0 0 40px -10px rgba(245, 158, 11, 0.28),
+    inset 0 1px 0 0 rgba(254, 243, 199, 0.42),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.10);
+}
+
+.ucc-liquid-glass--admin {
+  background: linear-gradient(
+    145deg,
+    rgba(15, 23, 42, 0.62) 0%,
+    rgba(30, 58, 138, 0.50) 48%,
+    rgba(127, 29, 29, 0.48) 100%
+  );
+  box-shadow:
+    0 32px 72px -16px rgba(2, 6, 23, 0.85),
+    0 0 32px -12px rgba(185, 28, 28, 0.30),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+.ucc-liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 28px;
+  padding: 1px;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(245, 158, 11, 0.24) 35%,
+    rgba(30, 58, 138, 0.14) 70%,
+    rgba(185, 28, 28, 0.25) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: uccLiquidShimmer 8s ease-in-out infinite;
+}
+
+@keyframes uccLiquidShimmer {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ucc-liquid-glass {
+    background: rgba(11, 22, 52, 0.92);
+  }
+  .ucc-liquid-glass--admin {
+    background: rgba(10, 16, 36, 0.95);
+  }
+  .ucc-header-glass {
+    background: rgba(10, 22, 52, 0.90) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ucc-liquid-glass::before {
+    animation: none;
+  }
+}
+
+.ucc-glass-input {
+  background: rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--ucc-white);
+}
+
+.ucc-glass-input:focus {
+  outline: none;
+  border-color: var(--ucc-gold);
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35);
+}
+
+.ucc-submit-btn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 12px 28px -8px rgba(185, 28, 28, 0.55);
+}
+
+.ucc-submit-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.65), 0 12px 28px -8px rgba(30, 58, 138, 0.6);
+}
+
+.ucc-glass-secondary-btn {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: var(--ucc-white);
+}
+
+.ucc-glass-secondary-btn:hover {
+  background: rgba(245, 158, 11, 0.20);
+  border-color: rgba(245, 158, 11, 0.75);
+}
+
