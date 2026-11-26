@@ -22,7 +22,7 @@ import { useToast } from '../../context/ToastContext';
 import api from '../../services/api';
 
 const StudentRegisterPage = () => {
-  const { register } = useAuth();
+  const { register, verifyRegistrationOtp } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
 
@@ -30,6 +30,14 @@ const StudentRegisterPage = () => {
   const [programmes, setProgrammes] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [otpStep, setOtpStep] = useState(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+  const [showAccessRequest, setShowAccessRequest] = useState(false);
+  const [accessReason, setAccessReason] = useState('');
+  const [submittingAccess, setSubmittingAccess] = useState(false);
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -85,12 +93,22 @@ const StudentRegisterPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setAlreadyRegistered(false);
     try {
-      const userData = await register({
+      const result = await register({
         ...formData,
         role: 'STUDENT',
       });
-      const isVerified = userData?.student_profile?.verification_status === 'VERIFIED';
+      if (result?.requires_otp) {
+        setOtpStep({
+          index_number: result.index_number,
+          destination: result.destination,
+          delivery_channel: result.delivery_channel,
+        });
+        addToast(result.message, 'info', 'Verification Code Sent');
+        return;
+      }
+      const isVerified = result?.student_profile?.verification_status === 'VERIFIED';
       addToast(
         isVerified
           ? 'Your UCC Student account has been verified against university records!'
@@ -101,16 +119,71 @@ const StudentRegisterPage = () => {
       navigate('/student/dashboard');
     } catch (err) {
       const data = err.response?.data;
+      if (data?.already_registered) {
+        setAlreadyRegistered(true);
+      }
       const firstErr =
+        (Array.isArray(data?.error) ? data.error[0] : data?.error) ||
         data?.email?.[0] ||
         data?.index_number?.[0] ||
         data?.password?.[0] ||
         data?.non_field_errors?.[0] ||
-        data?.error ||
         'Registration failed. Please verify all fields.';
       addToast(firstErr, 'error', 'Registration Error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otpStep || !otpCode.trim()) return;
+    setVerifyingOtp(true);
+    try {
+      await verifyRegistrationOtp(otpStep.index_number, otpCode.trim());
+      addToast('Your UCC Student account is now verified and active!', 'success', 'Account Activated');
+      navigate('/student/dashboard');
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Invalid or expired verification code.', 'error', 'Verification Failed');
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!otpStep) return;
+    setResendingOtp(true);
+    try {
+      const res = await api.post('/auth/register/resend-otp/', { index_number: otpStep.index_number });
+      addToast(res.data.message, 'info', 'Code Resent');
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Could not resend code right now.', 'error');
+    } finally {
+      setResendingOtp(false);
+    }
+  };
+
+  const handleAccessRequest = async (e) => {
+    e.preventDefault();
+    setSubmittingAccess(true);
+    try {
+      const res = await api.post('/students/access-requests/', {
+        index_number: formData.index_number,
+        full_name: formData.full_name,
+        institutional_email: formData.email,
+        phone_number: formData.phone_number,
+        department_id: formData.department_id,
+        programme_id: formData.programme_id,
+        academic_level: formData.academic_level,
+        reason: accessReason,
+      });
+      addToast(res.data.message, 'success', 'Access Request Submitted');
+      setShowAccessRequest(false);
+      setAccessReason('');
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Could not submit access request.', 'error');
+    } finally {
+      setSubmittingAccess(false);
     }
   };
 
@@ -567,15 +640,104 @@ const StudentRegisterPage = () => {
                 className="ucc-reg-btn-primary w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl disabled:opacity-60 text-white font-bold text-sm tracking-wide cursor-pointer"
               >
                 <span>
-                  {submitting ? 'Creating Student Account...' : 'Complete Student Registration'}
+                  {submitting ? 'Verifying Class List...' : 'Complete Student Registration'}
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+
+            {alreadyRegistered && (
+              <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-300/35 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-2">
+                <span>An account already exists for this index number.</span>
+                <div className="flex items-center gap-3 font-bold">
+                  <Link to="/login" className="underline text-white">Sign In</Link>
+                  <Link to="/forgot-password" className="underline text-blue-200">Reset Password</Link>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => setShowAccessRequest((v) => !v)}
+                className="text-xs font-semibold text-blue-200 hover:text-white underline underline-offset-4 cursor-pointer"
+              >
+                Not on the class list yet? Request Access from your Lecturer
+              </button>
+            </div>
           </form>
 
-          {/* Bottom Glass Divider & Portal Navigation Links */}
-          <div className="relative z-10 mt-6 pt-5 border-t border-white/15 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          {otpStep && (
+            <form onSubmit={handleVerifyOtp} className="relative z-10 mt-6 p-5 rounded-2xl bg-blue-950/60 border border-blue-300/30 space-y-4">
+              <div>
+                <h3 className="text-base font-extrabold text-white">Enter 6-Digit Verification Code</h3>
+                <p className="text-xs text-blue-100/85 mt-1">
+                  Sent via {otpStep.delivery_channel} to <span className="font-bold text-white">{otpStep.destination}</span>. Expires in 10 minutes.
+                </p>
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                required
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="6-digit code"
+                className="ucc-reg-input w-full px-4 py-3 rounded-xl text-white text-center font-mono text-lg tracking-[0.4em]"
+              />
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="submit"
+                  disabled={verifyingOtp || otpCode.length !== 6}
+                  className="ucc-reg-btn-primary flex-1 py-3 px-4 rounded-xl text-white font-bold text-sm disabled:opacity-60 cursor-pointer"
+                >
+                  {verifyingOtp ? 'Activating Account...' : 'Verify & Activate Account'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendingOtp}
+                  className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 cursor-pointer"
+                >
+                  {resendingOtp ? 'Sending...' : 'Resend Code'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {showAccessRequest && !otpStep && (
+            <form onSubmit={handleAccessRequest} className="relative z-10 mt-5 p-4 rounded-2xl bg-slate-950/55 border border-white/20 space-y-3">
+              <p className="text-xs font-bold text-white">
+                Request Class-List Access (uses the Index Number, Name &amp; Email entered above)
+              </p>
+              <textarea
+                rows={2}
+                value={accessReason}
+                onChange={(e) => setAccessReason(e.target.value)}
+                placeholder="Optional note for your lecturer/admin (e.g. late registration or transferred student)"
+                className="ucc-reg-input w-full px-3 py-2 rounded-xl text-white text-xs"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAccessRequest(false)}
+                  className="px-3 py-2 rounded-xl text-xs text-blue-200 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingAccess}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                >
+                  {submittingAccess ? 'Submitting...' : 'Submit Access Request'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Bottom Glass Divider & Sign In Link */}
+          <div className="relative z-10 mt-6 pt-5 border-t border-white/15 flex items-center justify-center text-xs">
             <Link
               to="/login"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white/90 hover:text-white font-semibold transition-all"
@@ -589,19 +751,6 @@ const StudentRegisterPage = () => {
               <span className="text-blue-300 underline decoration-blue-400/60 underline-offset-4">
                 Sign In
               </span>
-            </Link>
-
-            <Link
-              to="/register/lecturer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white/90 hover:text-white font-semibold transition-all"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(29, 78, 216, 0.24) 0%, rgba(220, 38, 38, 0.22) 100%)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-              }}
-            >
-              <span>Are you a Lecturer?</span>
-              <span className="text-red-300 font-bold">Register here →</span>
             </Link>
           </div>
         </div>

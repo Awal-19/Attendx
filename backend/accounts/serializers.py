@@ -1,10 +1,15 @@
 from rest_framework import serializers
 from django.db import transaction
 from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
 from .models import User
 from students.models import StudentProfile
-from students.normalization import normalize_index_number
+from students.normalization import (
+    is_valid_ucc_index_format,
+    names_match_tolerantly,
+    normalize_index_number,
+)
 from students.services import lookup_verified_student_record, auto_enroll_student_courses
 from lecturers.models import LecturerProfile
 from academics.models import Department, Programme, CourseEnrollment
@@ -154,37 +159,61 @@ class RegisterSerializer(serializers.Serializer):
     )
 
     def validate_email(self, value):
-        email = value.strip().lower()
-        if User.objects.filter(email=email).exists():
-            raise serializers.ValidationError("A user with this university email already exists.")
-        return email
+        return value.strip().lower()
 
     def validate(self, attrs):
+        from .registration_otp import GENERIC_ROSTER_MISMATCH_MSG
+
         role = attrs.get("role", "STUDENT")
         email = (attrs.get("email") or "").strip().lower()
 
         if role == "STUDENT":
-            if not (email.endswith("@stu.ucc.edu.gh") or email.endswith("@ucc.edu.gh")):
+            idx = normalize_index_number(attrs.get("index_number"))
+            if not is_valid_ucc_index_format(idx):
+                raise serializers.ValidationError({"error": GENERIC_ROSTER_MISMATCH_MSG})
+
+            existing_sp = StudentProfile.objects.filter(index_number=idx).select_related("user").first()
+            if existing_sp and existing_sp.user.is_active and existing_sp.user.has_usable_password():
                 raise serializers.ValidationError(
                     {
-                        "email": "Please use a valid UCC institutional email address (@stu.ucc.edu.gh or @ucc.edu.gh)."
+                        "error": "An account already exists for this index number.",
+                        "already_registered": True,
                     }
                 )
-            idx = normalize_index_number(attrs.get("index_number"))
-            if not idx:
-                raise serializers.ValidationError({"index_number": "Student index number is required."})
+
+            existing_email_user = User.objects.filter(email=email).first()
+            if existing_email_user and (
+                existing_email_user.is_active
+                or not existing_sp
+                or existing_email_user.id != existing_sp.user_id
+            ):
+                raise serializers.ValidationError({"error": GENERIC_ROSTER_MISMATCH_MSG})
+
             registry_record = lookup_verified_student_record(idx)
             if not registry_record:
-                raise serializers.ValidationError(
-                    {"index_number": "Your index number is not on the class list. Contact your lecturer."}
-                )
-            existing_sp = StudentProfile.objects.filter(index_number=idx).select_related("user").first()
-            if existing_sp and existing_sp.user.has_usable_password():
-                raise serializers.ValidationError(
-                    {"index_number": "A student with this index number is already registered."}
-                )
+                raise serializers.ValidationError({"error": GENERIC_ROSTER_MISMATCH_MSG})
+
+            if not names_match_tolerantly(attrs.get("full_name"), registry_record.full_name):
+                raise serializers.ValidationError({"error": GENERIC_ROSTER_MISMATCH_MSG})
+
+            roster_email = (registry_record.institutional_email or "").strip().lower()
+            has_valid_roster_email = bool(
+                roster_email and "@" in roster_email and not roster_email.endswith("@pending.ucc.local")
+            )
+            if has_valid_roster_email:
+                if email != roster_email:
+                    raise serializers.ValidationError({"error": GENERIC_ROSTER_MISMATCH_MSG})
+            else:
+                if not (email.endswith("@stu.ucc.edu.gh") or email.endswith("@ucc.edu.gh")):
+                    raise serializers.ValidationError({"error": GENERIC_ROSTER_MISMATCH_MSG})
+
             attrs["index_number"] = idx
+            attrs["_registry_record"] = registry_record
         elif role == "LECTURER":
+            if User.objects.filter(email=email).exists():
+                raise serializers.ValidationError(
+                    {"email": "A user with this university email already exists."}
+                )
             if not email.endswith("@ucc.edu.gh"):
                 raise serializers.ValidationError(
                     {"email": "Please use a valid UCC faculty email address (@ucc.edu.gh)."}
@@ -239,6 +268,7 @@ class RegisterSerializer(serializers.Serializer):
         if not programme and department:
             programme = Programme.objects.filter(department=department).first()
 
+        registry_record = validated_data.pop("_registry_record", None)
         claimed_user = None
         if role == "STUDENT":
             existing_sp = (
@@ -246,12 +276,13 @@ class RegisterSerializer(serializers.Serializer):
                 .select_related("user")
                 .first()
             )
-            if existing_sp and not existing_sp.user.has_usable_password():
+            if existing_sp and (not existing_sp.user.has_usable_password() or not existing_sp.user.is_active):
                 claimed_user = existing_sp.user
                 claimed_user.email = validated_data["email"]
                 claimed_user.full_name = validated_data["full_name"].strip()
                 claimed_user.phone_number = validated_data.get("phone_number", "")
                 claimed_user.institution = validated_data.get("institution", "University of Cape Coast (UCC)")
+                claimed_user.is_active = False
                 claimed_user.set_password(validated_data["password"])
                 claimed_user.save()
 
@@ -262,34 +293,15 @@ class RegisterSerializer(serializers.Serializer):
             role=role,
             phone_number=validated_data.get("phone_number", ""),
             institution=validated_data.get("institution", "University of Cape Coast (UCC)"),
+            is_active=(role != "STUDENT"),
         )
 
         if role == "STUDENT":
-            registry_record = lookup_verified_student_record(validated_data["index_number"])
-
-            if registry_record:
-                verified_dept = registry_record.department or department
-                verified_prog = registry_record.programme or programme
-                verified_level = registry_record.academic_level
-                verification_status = "VERIFIED"
-                verification_source = (
-                    registry_record.source
-                    if registry_record.source in ("CSV_IMPORT", "EXCEL_IMPORT", "UNIVERSITY_API")
-                    else "ADMIN_PORTAL"
-                )
-                verified_at = timezone.now()
-                admission_year = registry_record.admission_year
-                if registry_record.user_id is None:
-                    registry_record.user = user
-                    registry_record.save(update_fields=["user", "updated_at"])
-            else:
-                verified_dept = department
-                verified_prog = programme
-                verified_level = validated_data.get("academic_level", "300")
-                verification_status = "PENDING"
-                verification_source = "SELF_REGISTERED"
-                verified_at = None
-                admission_year = 2024
+            registry_record = registry_record or lookup_verified_student_record(validated_data["index_number"])
+            verified_dept = (registry_record.department if registry_record else None) or department
+            verified_prog = (registry_record.programme if registry_record else None) or programme
+            verified_level = registry_record.academic_level if registry_record else validated_data.get("academic_level", "300")
+            admission_year = registry_record.admission_year if registry_record else 2024
 
             StudentProfile.objects.update_or_create(
                 user=user,
@@ -299,20 +311,11 @@ class RegisterSerializer(serializers.Serializer):
                     "programme": verified_prog,
                     "academic_level": verified_level,
                     "admission_year": admission_year,
-                    "verification_status": verification_status,
-                    "verification_source": verification_source,
-                    "verified_at": verified_at,
+                    "verification_status": "PENDING",
+                    "verification_source": "SELF_REGISTERED",
+                    "verified_at": None,
                 },
             )
-
-            # Only auto-enroll students whose academic record is verified against university records
-            if verification_status == "VERIFIED":
-                auto_enroll_student_courses(
-                    user,
-                    department=verified_dept,
-                    academic_level=verified_level,
-                    programme=verified_prog,
-                )
 
         elif role == "LECTURER":
             LecturerProfile.objects.create(
@@ -327,6 +330,9 @@ class RegisterSerializer(serializers.Serializer):
         return user
 
 
+_DUMMY_PASSWORD_HASH = make_password("attendx-constant-time-dummy-password-2026")
+
+
 class LoginSerializer(serializers.Serializer):
     identifier = serializers.CharField(
         required=False,
@@ -338,20 +344,21 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         raw_identifier = (attrs.get("identifier") or attrs.get("email") or "").strip()
         password = attrs.get("password")
+        expected_roles = self.context.get("expected_roles")
 
         if not raw_identifier or not password:
             raise serializers.ValidationError("Both email/index number and password are required.")
 
         user_email = raw_identifier.lower()
-        # Allow students to sign in using their index number or lecturers with staff ID
         if "@" not in raw_identifier:
-            norm_idx = normalize_index_number(raw_identifier)
-            student_prof = StudentProfile.objects.filter(
-                index_number__iexact=norm_idx
-            ).select_related("user").first()
-            if student_prof:
-                user_email = student_prof.user.email
-            else:
+            if not expected_roles or "STUDENT" in expected_roles:
+                norm_idx = normalize_index_number(raw_identifier)
+                student_prof = StudentProfile.objects.filter(
+                    index_number__iexact=norm_idx
+                ).select_related("user").first()
+                if student_prof:
+                    user_email = student_prof.user.email
+            if user_email == raw_identifier.lower() and (not expected_roles or "LECTURER" in expected_roles):
                 lecturer_prof = LecturerProfile.objects.filter(
                     staff_id__iexact=raw_identifier
                 ).select_related("user").first()
@@ -368,16 +375,20 @@ class LoginSerializer(serializers.Serializer):
                     f"Account temporarily protected due to repeated failed attempts. Try again in {mins} minute(s)."
                 )
             if candidate.is_suspended:
-                raise serializers.ValidationError(
-                    "This account has been suspended by a university administrator."
-                )
+                raise serializers.ValidationError("Invalid credentials.")
+        else:
+            # Constant-time dummy hash check to prevent timing-based account enumeration
+            check_password(password, _DUMMY_PASSWORD_HASH)
+            raise serializers.ValidationError("Invalid credentials.")
 
         user = authenticate(username=user_email, password=password)
-        if not user:
+        if not user or not user.is_active:
             attrs["failed_email"] = user_email
-            raise serializers.ValidationError("Invalid credentials. Please verify your email/index number and password.")
-        if not user.is_active:
-            raise serializers.ValidationError("This user account has been deactivated. Contact the university administrator.")
+            raise serializers.ValidationError("Invalid credentials.")
+
+        if expected_roles and user.role not in expected_roles:
+            attrs["failed_email"] = user_email
+            raise serializers.ValidationError("Invalid credentials.")
 
         attrs["user"] = user
         return attrs

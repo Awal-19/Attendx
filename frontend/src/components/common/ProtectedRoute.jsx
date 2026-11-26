@@ -4,8 +4,14 @@ import { useAuth } from '../../context/AuthContext';
 
 export const getRoleHomePath = (role) => {
   if (role === 'LECTURER') return '/lecturer/dashboard';
-  if (role === 'ADMIN') return '/admin/dashboard';
+  if (role === 'ADMIN' || role === 'DEPT_ADMIN') return '/admin/dashboard';
   return '/student/dashboard';
+};
+
+export const getRoleLoginPath = (role) => {
+  if (role === 'LECTURER') return '/lecturer';
+  if (role === 'ADMIN' || role === 'DEPT_ADMIN') return '/admin';
+  return '/login';
 };
 
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
@@ -23,7 +29,12 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const targetLogin = allowedRoles.includes('LECTURER')
+      ? '/lecturer'
+      : allowedRoles.includes('ADMIN')
+        ? '/admin'
+        : '/login';
+    return <Navigate to={targetLogin} replace />;
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {

@@ -43,10 +43,57 @@ def get_tokens_for_user(user):
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    def get_throttles(self):
+        from .registration_otp import RegisterRateThrottle
+        return [RegisterRateThrottle()]
+
     def post(self, request):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        from students.models import UniversityStudentRecord
+        from students.normalization import normalize_index_number
+        from .registration_otp import (
+            check_index_rate_limit,
+            issue_and_send_registration_otp,
+            record_sanitized_registration_failure,
+        )
+
+        role = (request.data.get("role") or "STUDENT").upper()
+        norm_idx = normalize_index_number(request.data.get("index_number"))
+        if role == "STUDENT" and norm_idx:
+            if not check_index_rate_limit(norm_idx, "register", max_attempts=8, window_seconds=600):
+                return Response(
+                    {"error": "Too many registration attempts for this index number. Try again later."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
         serializer = RegisterSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except DRFValidationError as exc:
+            if role == "STUDENT":
+                record_sanitized_registration_failure(request, norm_idx or "unknown", "Validation mismatch")
+            raise exc
+
         user = serializer.save()
+
+        if user.role == "STUDENT":
+            registry_record = UniversityStudentRecord.objects.get(
+                index_number=user.student_profile.index_number
+            )
+            otp = issue_and_send_registration_otp(user, registry_record)
+            return Response(
+                {
+                    "requires_otp": True,
+                    "index_number": user.student_profile.index_number,
+                    "delivery_channel": otp.delivery_channel,
+                    "destination": otp.destination_masked,
+                    "message": (
+                        f"A 6-digit verification code was sent to {otp.destination_masked}. "
+                        "Enter it within 10 minutes to activate your account."
+                    ),
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         Notification.objects.create(
             recipient=user,
@@ -72,14 +119,33 @@ class RegisterView(APIView):
         )
 
 
-class LoginView(APIView):
+class RoleLoginView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_classes = [LoginRateThrottle]
+    allowed_roles = None
+    portal_key = "student"
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
+        from datetime import timedelta
+        from django.conf import settings
+        from django.core.cache import cache
+
+        raw_id = (request.data.get("identifier") or request.data.get("email") or "").strip().lower()
+        if raw_id:
+            rl_key = f"login_rl:{self.portal_key}:{raw_id}"
+            attempts = cache.get(rl_key, 0)
+            if attempts >= 12:
+                return Response(
+                    {"error": "Too many sign-in attempts. Please wait 10 minutes before trying again."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            cache.set(rl_key, attempts + 1, timeout=600)
+
+        serializer = LoginSerializer(
+            data=request.data,
+            context={"expected_roles": self.allowed_roles},
+        )
         if not serializer.is_valid():
-            raw_id = (request.data.get("identifier") or request.data.get("email") or "").strip()
             if raw_id:
                 record_failed_login(raw_id, request)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -91,19 +157,64 @@ class LoginView(APIView):
                 from students.services import sync_profile_with_registry
                 sync_profile_with_registry(user.student_profile)
 
-        tokens = get_tokens_for_user(user)
+        refresh = RefreshToken.for_user(user)
+        if user.role in ("ADMIN", "DEPT_ADMIN"):
+            lifetime = timedelta(minutes=getattr(settings, "ADMIN_SESSION_LIFETIME_MINUTES", 30))
+            refresh.set_exp(lifetime=lifetime)
+            access = refresh.access_token
+            access.set_exp(lifetime=lifetime)
+            max_age = int(lifetime.total_seconds())
+        else:
+            access = refresh.access_token
+            max_age = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+
+        access["role"] = user.role
+        access["email"] = user.email
+        access["portal"] = self.portal_key
+        tokens = {
+            "refresh": str(refresh),
+            "access": str(access),
+            "jti": str(refresh.get("jti", "")),
+        }
         jti = tokens.pop("jti", "")
         session = record_successful_login(user, jti, request)
         user_data = UserProfileSerializer(user).data
-        return Response(
+
+        resp = Response(
             {
                 "message": "Login successful.",
+                "portal": self.portal_key,
                 "user": user_data,
                 "tokens": tokens,
                 "session_id": str(session.id),
             },
             status=status.HTTP_200_OK,
         )
+        secure_cookie = not settings.DEBUG
+        resp.set_cookie(
+            f"attendx_access_{self.portal_key}",
+            tokens["access"],
+            max_age=max_age,
+            httponly=True,
+            secure=secure_cookie,
+            samesite="Lax",
+            path="/",
+        )
+        resp.set_cookie(
+            f"attendx_refresh_{self.portal_key}",
+            tokens["refresh"],
+            max_age=max_age if user.role in ("ADMIN", "DEPT_ADMIN") else int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
+            httponly=True,
+            secure=secure_cookie,
+            samesite="Lax",
+            path="/",
+        )
+        return resp
+
+
+class LoginView(RoleLoginView):
+    allowed_roles = None
+    portal_key = "default"
 
 
 class LogoutView(APIView):
@@ -111,6 +222,17 @@ class LogoutView(APIView):
 
     def post(self, request):
         refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            for cname in (
+                "attendx_refresh_admin",
+                "attendx_refresh_lecturer",
+                "attendx_refresh_student",
+                "attendx_refresh_default",
+                "attendx_refresh",
+            ):
+                if request.COOKIES.get(cname):
+                    refresh_token = request.COOKIES.get(cname)
+                    break
         if refresh_token:
             try:
                 token = RefreshToken(refresh_token)
@@ -130,7 +252,21 @@ class LogoutView(APIView):
             affected_id=request.user.id,
             request=request,
         )
-        return Response({"message": "Successfully logged out."}, status=status.HTTP_200_OK)
+        resp = Response({"message": "Successfully logged out."}, status=status.HTTP_200_OK)
+        for cname in (
+            "attendx_access_admin",
+            "attendx_refresh_admin",
+            "attendx_access_lecturer",
+            "attendx_refresh_lecturer",
+            "attendx_access_student",
+            "attendx_refresh_student",
+            "attendx_access_default",
+            "attendx_refresh_default",
+            "attendx_access",
+            "attendx_refresh",
+        ):
+            resp.delete_cookie(cname, path="/")
+        return resp
 
 
 class ProfileView(APIView):

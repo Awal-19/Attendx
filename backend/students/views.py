@@ -569,3 +569,158 @@ class UniversityRegistryListView(APIView):
             for r in qs[:300]
         ]
         return Response(data)
+
+
+class RosterAccessRequestListCreateView(APIView):
+    """
+    POST (AllowAny, rate-limited): Student not on the roster submits a request for lecturer/admin approval.
+    GET (Lecturer/Admin): List pending/reviewed access requests.
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.AllowAny()]
+        return [IsLecturerOrAdmin()]
+
+    def get_throttles(self):
+        if self.request.method == "POST":
+            from accounts.registration_otp import RegisterRateThrottle
+            return [RegisterRateThrottle()]
+        return []
+
+    def get(self, request):
+        from .models import RosterAccessRequest
+
+        req_status = (request.query_params.get("status") or "").strip().upper()
+        qs = RosterAccessRequest.objects.select_related("department", "programme", "reviewed_by").all()
+        if req_status in ("PENDING", "APPROVED", "REJECTED"):
+            qs = qs.filter(status=req_status)
+        return Response(
+            [
+                {
+                    "id": str(r.id),
+                    "index_number": r.index_number,
+                    "full_name": r.full_name,
+                    "institutional_email": r.institutional_email,
+                    "phone_number": r.phone_number,
+                    "department_id": str(r.department_id) if r.department_id else None,
+                    "department_name": r.department.name if r.department else "",
+                    "programme_id": str(r.programme_id) if r.programme_id else None,
+                    "programme_name": r.programme.name if r.programme else "",
+                    "academic_level": r.academic_level,
+                    "reason": r.reason,
+                    "status": r.status,
+                    "review_notes": r.review_notes,
+                    "reviewed_by_email": r.reviewed_by.email if r.reviewed_by else None,
+                    "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+                    "created_at": r.created_at.isoformat(),
+                }
+                for r in qs[:200]
+            ]
+        )
+
+    def post(self, request):
+        from accounts.registration_otp import check_index_rate_limit
+        from .models import RosterAccessRequest
+        from .normalization import clean_name, is_valid_ucc_index_format, normalize_ghana_phone, normalize_index_number
+
+        idx = normalize_index_number(request.data.get("index_number"))
+        if not is_valid_ucc_index_format(idx):
+            return Response(
+                {"error": "Provide a valid UCC Index Number in the format PS/CSC/YY/NNNN."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not check_index_rate_limit(idx, "access_request", max_attempts=5, window_seconds=600):
+            return Response(
+                {"error": "Too many access requests for this index number. Try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        full_name = clean_name(request.data.get("full_name"))
+        email = (request.data.get("institutional_email") or request.data.get("email") or "").strip().lower()
+        if not full_name or len(full_name.split()) < 2:
+            return Response({"error": "Provide your full name (surname and first name)."}, status=status.HTTP_400_BAD_REQUEST)
+        if not email or not (email.endswith("@stu.ucc.edu.gh") or email.endswith("@ucc.edu.gh")):
+            return Response(
+                {"error": "Provide a valid UCC institutional email (@stu.ucc.edu.gh or @ucc.edu.gh)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if RosterAccessRequest.objects.filter(index_number=idx, status="PENDING").exists():
+            return Response(
+                {"error": "An access request for this index number is already pending review."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        phone_norm, raw_phone, _ = normalize_ghana_phone(request.data.get("phone_number"))
+        dept = Department.objects.filter(id=request.data.get("department_id")).first() if request.data.get("department_id") else None
+        prog = Programme.objects.filter(id=request.data.get("programme_id")).first() if request.data.get("programme_id") else None
+
+        req = RosterAccessRequest.objects.create(
+            index_number=idx,
+            full_name=full_name,
+            institutional_email=email,
+            phone_number=phone_norm or raw_phone,
+            department=dept,
+            programme=prog,
+            academic_level=str(request.data.get("academic_level") or "300"),
+            reason=(request.data.get("reason") or "").strip()[:500],
+            status="PENDING",
+        )
+        return Response(
+            {
+                "message": "Your access request has been submitted for lecturer/admin approval.",
+                "request_id": str(req.id),
+                "status": req.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RosterAccessRequestReviewView(APIView):
+    """Approve or reject a pending RosterAccessRequest (Lecturer or Admin only)."""
+
+    permission_classes = [IsLecturerOrAdmin]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        from django.utils import timezone
+        from .models import RosterAccessRequest
+
+        req = get_object_or_404(RosterAccessRequest, id=pk)
+        action = (request.data.get("action") or "").strip().lower()
+        notes = (request.data.get("review_notes") or "").strip()[:255]
+
+        if action not in ("approve", "reject"):
+            return Response({"error": "Action must be 'approve' or 'reject'."}, status=status.HTTP_400_BAD_REQUEST)
+        if req.status != "PENDING":
+            return Response({"error": f"Request has already been {req.status.lower()}."}, status=status.HTTP_400_BAD_REQUEST)
+
+        req.status = "APPROVED" if action == "approve" else "REJECTED"
+        req.reviewed_by = request.user
+        req.review_notes = notes
+        req.reviewed_at = timezone.now()
+        req.save(update_fields=["status", "reviewed_by", "review_notes", "reviewed_at", "updated_at"])
+
+        if action == "approve":
+            UniversityStudentRecord.objects.update_or_create(
+                index_number=req.index_number,
+                defaults={
+                    "full_name": req.full_name,
+                    "institutional_email": req.institutional_email,
+                    "phone_number": req.phone_number,
+                    "department": req.department,
+                    "programme": req.programme,
+                    "academic_level": req.academic_level,
+                    "source": "ACCESS_REQUEST",
+                    "is_active": True,
+                },
+            )
+
+        return Response(
+            {
+                "message": f"Access request for {req.index_number} {req.status.lower()}.",
+                "status": req.status,
+            },
+            status=status.HTTP_200_OK,
+        )

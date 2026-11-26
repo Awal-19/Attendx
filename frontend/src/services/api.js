@@ -4,6 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -49,7 +50,12 @@ api.interceptors.response.use(
           localStorage.removeItem('attendx_access_token');
           localStorage.removeItem('attendx_refresh_token');
           localStorage.removeItem('attendx_user');
-          window.location.href = '/login';
+          const p = window.location.pathname.toLowerCase();
+          window.location.href = p.startsWith('/lecturer')
+            ? '/lecturer'
+            : p.startsWith('/admin')
+              ? '/admin'
+              : '/login';
         }
       }
     }

@@ -135,9 +135,9 @@ const DashboardLayout = ({ children }) => {
   }, [location.pathname, addToast]);
 
   const handleLogout = async () => {
-    await logout();
+    const redirectPath = await logout();
     addToast('You have been securely logged out of AttendX.', 'info');
-    navigate('/login');
+    navigate(redirectPath || '/login');
   };
 
   const role = user?.role || 'STUDENT';

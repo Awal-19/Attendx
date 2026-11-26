@@ -41,8 +41,9 @@ export const AuthProvider = ({ children }) => {
     refreshProfile();
   }, [refreshProfile]);
 
-  const login = async (identifier, password) => {
-    const res = await api.post('/auth/login/', { identifier, password });
+  const login = async (identifier, password, roleKey = 'student') => {
+    const endpoint = roleKey ? `/auth/${roleKey}/login/` : '/auth/login/';
+    const res = await api.post(endpoint, { identifier, password });
     const { user: userData, tokens } = res.data;
     localStorage.setItem('attendx_access_token', tokens.access);
     localStorage.setItem('attendx_refresh_token', tokens.refresh);
@@ -53,6 +54,19 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (payload) => {
     const res = await api.post('/auth/register/', payload);
+    if (res.data?.requires_otp) {
+      return res.data;
+    }
+    const { user: userData, tokens } = res.data;
+    localStorage.setItem('attendx_access_token', tokens.access);
+    localStorage.setItem('attendx_refresh_token', tokens.refresh);
+    localStorage.setItem('attendx_user', JSON.stringify(userData));
+    setUser(userData);
+    return userData;
+  };
+
+  const verifyRegistrationOtp = async (index_number, code) => {
+    const res = await api.post('/auth/register/verify-otp/', { index_number, code });
     const { user: userData, tokens } = res.data;
     localStorage.setItem('attendx_access_token', tokens.access);
     localStorage.setItem('attendx_refresh_token', tokens.refresh);
@@ -63,10 +77,11 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     const refresh = localStorage.getItem('attendx_refresh_token');
+    const role = user?.role;
+    const redirectPath =
+      role === 'LECTURER' ? '/lecturer' : role === 'ADMIN' || role === 'DEPT_ADMIN' ? '/admin' : '/login';
     try {
-      if (refresh) {
-        await api.post('/auth/logout/', { refresh });
-      }
+      await api.post('/auth/logout/', refresh ? { refresh } : {});
     } catch {
       // Ignore logout network error
     } finally {
@@ -75,6 +90,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('attendx_user');
       setUser(null);
     }
+    return redirectPath;
   };
 
   return (
@@ -85,6 +101,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         register,
+        verifyRegistrationOtp,
         logout,
         refreshProfile,
       }}

@@ -311,7 +311,7 @@ CORS_ALLOW_CREDENTIALS = True
 # Django REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "accounts.authentication.CookieOrHeaderJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -328,8 +328,29 @@ REST_FRAMEWORK = {
         "login": "20/minute",
         "biometric_enroll": "15/hour",
         "biometric_verify": "60/minute",
+        "register": "15/minute",
+        "otp_verify": "20/minute",
     },
 }
+
+# Password Hashing (Argon2 primary, PBKDF2 fallback for existing accounts)
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+]
+
+# Email Delivery (console in dev unless EMAIL_HOST is configured)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "AttendX UCC <noreply@ucc.edu.gh>")
 
 # HTTP Security Hardening Headers
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -381,6 +402,9 @@ SIMPLE_JWT = {
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+ADMIN_SESSION_LIFETIME_MINUTES = int(os.getenv("ADMIN_SESSION_LIFETIME_MINUTES", "30"))
+LECTURER_SESSION_LIFETIME_MINUTES = int(os.getenv("LECTURER_SESSION_LIFETIME_MINUTES", "120"))
 
 # QR Security Settings
 QR_TOKEN_DEFAULT_EXPIRY_SECONDS = int(

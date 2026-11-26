@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView,
     LoginView,
+    RoleLoginView,
     LogoutView,
     ProfileView,
     ChangePasswordView,
@@ -13,10 +14,16 @@ from .views import (
     RevokeAllOtherSessionsView,
     AdminSecurityAuditLogView,
 )
+from .registration_otp import RegisterVerifyOTPView, RegisterResendOTPView
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="auth-register"),
+    path("register/verify-otp/", RegisterVerifyOTPView.as_view(), name="auth-register-verify-otp"),
+    path("register/resend-otp/", RegisterResendOTPView.as_view(), name="auth-register-resend-otp"),
     path("login/", LoginView.as_view(), name="auth-login"),
+    path("student/login/", RoleLoginView.as_view(allowed_roles=["STUDENT"], portal_key="student"), name="auth-student-login"),
+    path("lecturer/login/", RoleLoginView.as_view(allowed_roles=["LECTURER"], portal_key="lecturer"), name="auth-lecturer-login"),
+    path("admin/login/", RoleLoginView.as_view(allowed_roles=["ADMIN", "DEPT_ADMIN"], portal_key="admin"), name="auth-admin-login"),
     path("token/refresh/", TokenRefreshView.as_view(), name="auth-token-refresh"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),

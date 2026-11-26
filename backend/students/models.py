@@ -25,6 +25,7 @@ class UniversityStudentRecord(models.Model):
         ("MANUAL", "Admin Manual Entry"),
         ("CSV_IMPORT", "CSV Bulk Import"),
         ("EXCEL_IMPORT", "Excel (.xlsx) Import"),
+        ("ACCESS_REQUEST", "Approved Student Access Request"),
         ("UNIVERSITY_API", "University Student Records API"),
     )
 
@@ -189,3 +190,64 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.full_name} ({self.index_number}) [{self.verification_status}]"
+
+
+class RosterAccessRequest(models.Model):
+    """Pending request from a student missing from the imported class roster."""
+
+    STATUS_CHOICES = (
+        ("PENDING", "Pending Review"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    index_number = models.CharField(max_length=40, db_index=True)
+    full_name = models.CharField(max_length=180)
+    institutional_email = models.EmailField(db_index=True)
+    phone_number = models.CharField(max_length=30, blank=True, default="")
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="access_requests",
+    )
+    programme = models.ForeignKey(
+        Programme,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="access_requests",
+    )
+    academic_level = models.CharField(max_length=10, default="300")
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING", db_index=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_access_requests",
+    )
+    review_notes = models.CharField(max_length=255, blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["index_number", "status"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.index_number:
+            self.index_number = normalize_index_number(self.index_number)
+        if self.institutional_email:
+            self.institutional_email = self.institutional_email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.index_number} ({self.status})"

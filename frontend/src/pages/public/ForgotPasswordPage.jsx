@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { QrCode, KeyRound, ArrowRight, CheckCircle2 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
@@ -12,6 +12,16 @@ const ForgotPasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const roleParam = (searchParams.get('role') || '').toLowerCase();
+  const pathLower = location.pathname.toLowerCase();
+  const returnLoginPath =
+    roleParam === 'lecturer' || pathLower.startsWith('/lecturer')
+      ? '/lecturer'
+      : roleParam === 'admin' || pathLower.startsWith('/admin')
+        ? '/admin'
+        : '/login';
 
   const handleLookup = async (e) => {
     e.preventDefault();
@@ -40,7 +50,7 @@ const ForgotPasswordPage = () => {
         new_password: newPassword,
       });
       addToast('Password reset successful! You can now sign in.', 'success');
-      navigate('/login');
+      navigate(returnLoginPath);
     } catch (err) {
       addToast(
         err.response?.data?.error || 'Verification failed. Check your Index Number / Staff ID.',
@@ -140,7 +150,7 @@ const ForgotPasswordPage = () => {
           )}
 
           <div className="mt-6 pt-4 border-t border-slate-800 text-center">
-            <Link to="/login" className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+            <Link to={returnLoginPath} className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
               ← Return to Sign In
             </Link>
           </div>

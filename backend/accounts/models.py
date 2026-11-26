@@ -122,6 +122,8 @@ class SecurityAuditLog(models.Model):
         ("ANNOUNCEMENT_PUBLISHED", "Announcement Published"),
         ("BACKUP_EVENT", "Database Backup or Verification"),
         ("CONFIG_CHANGED", "System Configuration Changed"),
+        ("REGISTRATION_FAILED", "Student Registration Verification Failed"),
+        ("OTP_FAILED", "Registration OTP Verification Failed"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -152,4 +154,38 @@ class SecurityAuditLog(models.Model):
 
     def __str__(self):
         return f"[{self.action}] {self.actor_email or 'Anonymous'} @ {self.timestamp.isoformat()}"
+
+
+class RegistrationOTP(models.Model):
+    """6-digit one-time verification code for activating newly registered students."""
+
+    CHANNEL_CHOICES = (
+        ("EMAIL", "Institutional Email"),
+        ("PHONE", "Phone / SMS Fallback"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="registration_otps",
+    )
+    index_number = models.CharField(max_length=40, db_index=True)
+    code_hash = models.CharField(max_length=255)
+    delivery_channel = models.CharField(max_length=15, choices=CHANNEL_CHOICES, default="EMAIL")
+    destination_masked = models.CharField(max_length=120, blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+    is_used = models.BooleanField(default=False, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["index_number", "is_used", "expires_at"]),
+        ]
+
+    def __str__(self):
+        return f"OTP({self.index_number}, used={self.is_used}, attempts={self.attempts})"
 

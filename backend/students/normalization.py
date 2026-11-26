@@ -1,8 +1,55 @@
 import re
+from difflib import SequenceMatcher
 from typing import Optional, Tuple
 
 EMAIL_REGEX = re.compile(r"^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$")
+UCC_INDEX_REGEX = re.compile(r"^PS/CSC/\d{2}/\d{4}$")
 BAD_TLD_TYPOS = {"cim", "con", "yh"}
+
+
+def is_valid_ucc_index_format(normalized_index: Optional[str]) -> bool:
+    """Returns True only if normalized_index strictly matches PS/CSC/YY/NNNN."""
+    return bool(normalized_index and UCC_INDEX_REGEX.match(normalized_index))
+
+
+def _name_tokens(raw: Optional[str]) -> list:
+    if not raw:
+        return []
+    cleaned = re.sub(r"[^\w\s]", " ", str(raw).lower())
+    cleaned = cleaned.replace("_", " ")
+    return [tok for tok in cleaned.split() if tok]
+
+
+def names_match_tolerantly(typed_name: Optional[str], roster_name: Optional[str]) -> bool:
+    """
+    Order-insensitive, punctuation-insensitive, typo-tolerant name matcher.
+    Roster names are SURNAME FIRST MIDDLE; students often type FIRST LAST.
+    Requires >= 80% token match (fuzzy ratio >= 0.80 per token).
+    """
+    typed = _name_tokens(typed_name)
+    roster = _name_tokens(roster_name)
+    if not typed or not roster:
+        return False
+    if len(roster) >= 2 and len(typed) < 2:
+        return False
+
+    used = set()
+    matched = 0
+    for t in typed:
+        best_idx = -1
+        best_ratio = 0.0
+        for idx, r in enumerate(roster):
+            if idx in used:
+                continue
+            ratio = 1.0 if t == r else SequenceMatcher(None, t, r).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_idx = idx
+        if best_idx != -1 and best_ratio >= 0.80:
+            used.add(best_idx)
+            matched += 1
+
+    return (matched / len(typed)) >= 0.80 and matched >= min(2, len(roster))
 
 
 def normalize_index_number(raw: Optional[str]) -> str:

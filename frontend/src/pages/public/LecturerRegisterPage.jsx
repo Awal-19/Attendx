@@ -535,7 +535,7 @@ const LecturerRegisterPage = () => {
           {/* Bottom Glass Divider & Portal Navigation Links */}
           <div className="relative z-10 mt-6 pt-5 border-t border-white/15 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             <Link
-              to="/login"
+              to="/lecturer"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white/90 hover:text-white font-semibold transition-all"
               style={{
                 background: 'rgba(255, 255, 255, 0.08)',

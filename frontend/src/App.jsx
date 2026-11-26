@@ -7,10 +7,13 @@ import DashboardLayout from './components/layout/DashboardLayout';
 
 // Public Pages
 import LandingPage from './pages/public/LandingPage';
-import LoginPage from './pages/public/LoginPage';
+import StudentLoginPage from './pages/public/StudentLoginPage';
+import LecturerLoginPage from './pages/public/LecturerLoginPage';
+import AdminLoginPage from './pages/public/AdminLoginPage';
 import StudentRegisterPage from './pages/public/StudentRegisterPage';
 import LecturerRegisterPage from './pages/public/LecturerRegisterPage';
 import ForgotPasswordPage from './pages/public/ForgotPasswordPage';
+import NotFoundPage from './pages/public/NotFoundPage';
 
 // Student Pages
 import StudentDashboard from './pages/student/StudentDashboard';
@@ -64,14 +67,21 @@ const App = () => {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/login/student" element={<LoginPage />} />
-            <Route path="/student/login" element={<LoginPage />} />
-            <Route path="/login/lecturer" element={<LoginPage />} />
-            <Route path="/lecturer/login" element={<LoginPage />} />
+            <Route path="/login" element={<StudentLoginPage />} />
+            <Route path="/student" element={<StudentLoginPage />} />
+            <Route path="/student/login" element={<StudentLoginPage />} />
+            <Route path="/login/student" element={<StudentLoginPage />} />
+            <Route path="/lecturer" element={<LecturerLoginPage />} />
+            <Route path="/lecturer/login" element={<LecturerLoginPage />} />
+            <Route path="/login/lecturer" element={<LecturerLoginPage />} />
+            <Route path="/admin" element={<AdminLoginPage />} />
+            <Route path="/admin/login" element={<AdminLoginPage />} />
+            <Route path="/login/admin" element={<AdminLoginPage />} />
             <Route path="/register/student" element={<StudentRegisterPage />} />
             <Route path="/register/lecturer" element={<LecturerRegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/lecturer/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
 
             {/* Student Portal Routes */}
             <Route path="/student/dashboard" element={withLayout(StudentDashboard, ['STUDENT'])} />
@@ -110,8 +120,8 @@ const App = () => {
             <Route path="/admin/notifications" element={withLayout(NotificationsPage, ['ADMIN'])} />
             <Route path="/admin/settings" element={withLayout(SystemSettings, ['ADMIN'])} />
 
-            {/* Catch-all fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Catch-all 404 */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>
