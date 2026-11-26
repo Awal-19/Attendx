@@ -15,4 +15,7 @@ data_issues_report.csv
 backend/private_backups/
 mobile/dist-android/
 mobile/dist-ios/
+.netlify/
+.railway/
+.vercel/
 

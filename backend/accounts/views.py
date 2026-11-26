@@ -191,13 +191,14 @@ class RoleLoginView(APIView):
             status=status.HTTP_200_OK,
         )
         secure_cookie = not settings.DEBUG
+        samesite_policy = "None" if not settings.DEBUG else "Lax"
         resp.set_cookie(
             f"attendx_access_{self.portal_key}",
             tokens["access"],
             max_age=max_age,
             httponly=True,
             secure=secure_cookie,
-            samesite="Lax",
+            samesite=samesite_policy,
             path="/",
         )
         resp.set_cookie(
@@ -206,7 +207,7 @@ class RoleLoginView(APIView):
             max_age=max_age if user.role in ("ADMIN", "DEPT_ADMIN") else int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
             httponly=True,
             secure=secure_cookie,
-            samesite="Lax",
+            samesite=samesite_policy,
             path="/",
         )
         return resp
