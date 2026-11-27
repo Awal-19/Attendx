@@ -151,7 +151,7 @@ const DashboardLayout = ({ children }) => {
       : 'UCC System Administrator';
 
   return (
-    <div className="min-h-screen flex bg-[#f4f7fb] text-slate-900 selection:bg-blue-600 selection:text-white">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden flex bg-[#f4f7fb] text-slate-900 selection:bg-blue-600 selection:text-white">
       {/* Embedded Liquid Glass Sidebar & Dashboard Theme Styles */}
       <style>{`
         .ucc-sidebar-shell {
@@ -419,7 +419,7 @@ const DashboardLayout = ({ children }) => {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col w-full min-w-0 max-w-full">
         {/* Topbar */}
         <header
           className="h-16 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30 border-b border-slate-200/80"
@@ -557,7 +557,7 @@ const DashboardLayout = ({ children }) => {
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 px-4 py-5 sm:p-8 pb-24 md:pb-8 max-w-7xl w-full mx-auto min-w-0">
+        <main className="flex-1 w-full min-w-0 max-w-7xl mx-auto px-4 py-5 sm:p-8 pb-24 md:pb-8">
           {children}
         </main>
 
@@ -568,7 +568,7 @@ const DashboardLayout = ({ children }) => {
             className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
-            <div className="grid grid-cols-5 h-16">
+            <div className="grid grid-cols-[repeat(5,minmax(0,1fr))] h-16">
               {[
                 { label: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
                 { label: 'Scan', path: '/student/scan', icon: QrCode },

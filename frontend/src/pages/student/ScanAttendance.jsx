@@ -160,9 +160,7 @@ const ScanAttendance = () => {
       }
 
       if (valRes.data.face_registration_required) {
-        setErrorMsg(
-          'Face ID enrollment is required before marking attendance. Complete enrollment and you will return here automatically.'
-        );
+        setErrorMsg('');
         setFaceStep({
           token: cleanToken,
           unregistered: true,
@@ -410,64 +408,59 @@ const ScanAttendance = () => {
         </div>
       )}
 
-      {/* Confirmation Card */}
+      {/* Full-Screen Confirmation Card */}
       {scanResult && (
         <div
-          className="p-6 sm:p-8 rounded-3xl text-white shadow-2xl space-y-5"
+          className="fixed inset-0 z-50 min-h-[100dvh] w-full overflow-y-auto flex items-center justify-center p-4 sm:p-8 text-white"
           style={{
             background: 'linear-gradient(135deg, #040d21 0%, #065f46 55%, #047857 100%)',
-            border: '1px solid rgba(255, 255, 255, 0.28)',
+            paddingTop: 'max(16px, env(safe-area-inset-top))',
+            paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
           }}
         >
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/25 border border-emerald-300/40 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-8 h-8 text-emerald-300" />
-            </div>
-            <div>
+          <div className="w-full max-w-md rounded-3xl bg-white/10 border border-white/25 backdrop-blur-xl p-6 sm:p-8 shadow-2xl space-y-5">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/25 border border-emerald-300/40 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-9 h-9 text-emerald-300" />
+              </div>
               <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">
                 QR + 1:1 FACE VERIFICATION PASSED
               </span>
-              <h3 className="text-[22px] sm:text-2xl font-extrabold">
+              <h3 className="text-2xl font-extrabold">
                 You&apos;re marked present
               </h3>
             </div>
-          </div>
 
-          <div className="grid sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-[#040d21]/60 border border-white/15 text-xs">
-            <div>
-              <p className="text-emerald-200/80">Course</p>
-              <p className="font-bold text-white mt-0.5">
-                {scanResult.course_code} — {scanResult.course_title}
-              </p>
+            <div className="grid grid-cols-1 gap-3 p-4 rounded-2xl bg-[#040d21]/60 border border-white/15 text-xs">
+              <div>
+                <p className="text-emerald-200/80">Course</p>
+                <p className="font-bold text-white mt-0.5">
+                  {scanResult.course_code} — {scanResult.course_title}
+                </p>
+              </div>
+              <div>
+                <p className="text-emerald-200/80">Student &amp; Index</p>
+                <p className="font-bold text-white mt-0.5">
+                  {scanResult.student_name} ({scanResult.student_index_number})
+                </p>
+              </div>
+              <div>
+                <p className="text-emerald-200/80">Time</p>
+                <p className="font-mono text-white mt-0.5">
+                  {new Date(scanResult.timestamp).toLocaleDateString()} •{' '}
+                  {new Date(scanResult.timestamp).toLocaleTimeString()}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-emerald-200/80">Student &amp; Index</p>
-              <p className="font-bold text-white mt-0.5">
-                {scanResult.student_name} ({scanResult.student_index_number})
-              </p>
-            </div>
-            <div>
-              <p className="text-emerald-200/80">Time</p>
-              <p className="font-mono text-white mt-0.5">
-                {new Date(scanResult.timestamp).toLocaleDateString()} •{' '}
-                {new Date(scanResult.timestamp).toLocaleTimeString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-emerald-200/80">Status</p>
-              <p className="font-bold text-emerald-200 mt-0.5">
-                {scanResult.status} ({verificationMeta?.biometric_verified ? 'QR + Face Verified' : scanResult.verification_method})
-              </p>
-            </div>
-          </div>
 
-          <Link
-            to="/student/dashboard"
-            className="w-full min-h-[48px] py-3 px-5 rounded-xl bg-white text-[#061430] hover:bg-emerald-50 font-extrabold text-sm inline-flex items-center justify-center gap-2 transition"
-          >
-            <span>Go to dashboard</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+            <Link
+              to="/student/dashboard"
+              className="w-full min-h-[48px] py-3 px-5 rounded-xl bg-white text-[#061430] hover:bg-emerald-50 font-extrabold text-sm inline-flex items-center justify-center gap-2 transition"
+            >
+              <span>Go to dashboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       )}
 
@@ -490,56 +483,76 @@ const ScanAttendance = () => {
         </div>
       )}
 
-      {/* Liquid Glass Step 5-8: "Verify Your Identity" Camera Frame */}
+      {/* Full-Screen Guided Face Setup or Live Face Verification */}
       {faceStep && faceStep.unregistered ? (
-        <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-4 text-center">
-          <h3 className="text-xl font-extrabold text-[#061430]">Face ID Enrollment Required</h3>
-          <p className="text-sm text-slate-600">
-            You must enroll your Face ID once before marking attendance. After enrolling, you will
-            return straight here to finish checking in.
-          </p>
-          <Link
-            to={`/student/face-enrollment?next=${encodeURIComponent(
-              `/student/scan?t=${encodeURIComponent(faceStep.token)}`
-            )}`}
-            className="w-full sm:w-auto min-h-[48px] px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm inline-flex items-center justify-center gap-2"
-          >
-            <span>Enroll Face ID Now</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+        <div
+          className="fixed inset-0 z-50 min-h-[100dvh] w-full bg-[#040d21] text-white overflow-y-auto flex items-center justify-center p-4 sm:p-8"
+          style={{
+            paddingTop: 'max(16px, env(safe-area-inset-top))',
+            paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white/10 border border-white/20 backdrop-blur-xl p-6 sm:p-8 text-center space-y-5 shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center bg-blue-500/20 border border-blue-300/35">
+              <UserCheck className="w-7 h-7 text-blue-300" />
+            </div>
+            <h3 className="text-2xl font-extrabold">
+              First, let&apos;s set up your Face ID (one time)
+            </h3>
+            <p className="text-sm text-blue-100/90">
+              Your encrypted Face ID takes 3 quick captures. Once complete, you&apos;ll continue
+              straight into attendance verification without rescanning the QR.
+            </p>
+            <Link
+              to={`/student/face-enrollment?next=${encodeURIComponent(
+                `/student/scan?t=${encodeURIComponent(faceStep.token)}`
+              )}`}
+              className="w-full min-h-[48px] px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm inline-flex items-center justify-center gap-2"
+            >
+              <span>Set Up Face ID</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setFaceStep(null)}
+              className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-blue-100 cursor-pointer"
+            >
+              Back
+            </button>
+          </div>
         </div>
       ) : faceStep ? (
         <div
-          className="relative rounded-3xl p-6 sm:p-8 text-white shadow-2xl space-y-5 overflow-hidden"
+          className="fixed inset-0 z-50 min-h-[100dvh] w-full overflow-y-auto text-white flex flex-col justify-between p-4 sm:p-6"
           style={{
             background:
-              'linear-gradient(145deg, rgba(4, 13, 33, 0.94) 0%, rgba(15, 34, 78, 0.92) 60%, rgba(153, 27, 27, 0.85) 100%)',
-            backdropFilter: 'blur(24px)',
-            border: '1px solid rgba(255, 255, 255, 0.25)',
+              'linear-gradient(145deg, #040d21 0%, #0f224e 60%, #7f1d1d 100%)',
+            paddingTop: 'max(16px, env(safe-area-inset-top))',
+            paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
           }}
         >
-          <div
-            className="absolute top-0 inset-x-0 h-[2px]"
-            style={{
-              background:
-                'linear-gradient(90deg, transparent 5%, rgba(96, 165, 250, 0.9) 30%, rgba(255, 255, 255, 0.95) 50%, rgba(248, 113, 113, 0.9) 70%, transparent 95%)',
-            }}
-          />
+          <div className="w-full max-w-md mx-auto space-y-4 my-auto">
+            <div className="text-center space-y-1.5">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-bold uppercase tracking-wider text-blue-200">
+                {faceStep.session?.course_code} • QR Token Verified
+              </span>
+              <h3 className="text-2xl font-extrabold tracking-tight text-white">
+                Verify Your Identity
+              </h3>
+              <p className="text-sm text-blue-100/90 font-medium">
+                Position your face inside the oval guide.
+              </p>
+              <p className="text-xs text-red-200 font-semibold">
+                {faceStep.liveness_instruction}
+              </p>
+            </div>
 
-          <div className="text-center space-y-1.5">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-bold uppercase tracking-wider text-blue-200">
-              {faceStep.session?.course_code} • QR Token Verified
-            </span>
-            <h3 className="text-2xl font-extrabold tracking-tight text-white">
-              Verify Your Identity
-            </h3>
-            <p className="text-sm text-blue-100/90 font-medium">
-              Position your face inside the frame.
-            </p>
-            <p className="text-xs text-red-200 font-semibold">
-              Liveness Prompt: {faceStep.liveness_instruction}
-            </p>
-          </div>
+            {errorMsg && (
+              <div className="p-3.5 rounded-2xl bg-red-950/80 border border-red-400/40 text-red-100 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-red-300 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
           {faceCameraActive ? (
             <div className="space-y-4">
@@ -584,26 +597,35 @@ const ScanAttendance = () => {
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-center gap-3">
+              <div className="flex flex-col gap-2.5">
                 <button
                   onClick={handleCaptureAndVerifyFace}
                   disabled={verifyingFace}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm shadow-xl cursor-pointer disabled:opacity-60"
+                  className="w-full min-h-[52px] inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-extrabold text-sm shadow-xl cursor-pointer disabled:opacity-60"
                   style={{
                     background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 55%, #dc2626 100%)',
                     border: '1px solid rgba(255, 255, 255, 0.35)',
                   }}
                 >
-                  <UserCheck className="w-4 h-4" />
+                  <UserCheck className="w-5 h-5" />
                   <span>{verifyingFace ? 'Verifying Identity...' : 'Capture & Verify Identity'}</span>
                 </button>
 
                 <button
+                  type="button"
+                  onClick={handleRequestAlternativeOrDispute}
+                  className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-blue-100 text-xs font-semibold cursor-pointer"
+                >
+                  Request manual lecturer verification
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => {
                     setFaceStep(null);
                     stopFaceCamera();
                   }}
-                  className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+                  className="w-full min-h-[44px] px-4 py-2 rounded-xl text-blue-200/80 hover:text-white text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -613,13 +635,21 @@ const ScanAttendance = () => {
             <div className="text-center py-6 space-y-3">
               <button
                 onClick={startFaceCamera}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold cursor-pointer"
+                className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Retry Camera Access</span>
               </button>
+              <button
+                type="button"
+                onClick={handleRequestAlternativeOrDispute}
+                className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-blue-100 text-xs font-semibold cursor-pointer"
+              >
+                Request manual lecturer verification
+              </button>
             </div>
           )}
+          </div>
         </div>
       ) : (
         /* Step 1-2: Optical QR Scanner & Token Input */

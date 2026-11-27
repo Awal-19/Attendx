@@ -135,18 +135,18 @@ const StudentDashboard = () => {
 
           <Link
             to="/student/scan"
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm transition shrink-0"
+            className="min-h-[48px] w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition shrink-0"
           >
             <QrCode className="w-4 h-4" />
             <span>
-              {activeSessions[0].already_attended ? 'View Scanner Status' : 'Scan QR Now'}
+              {activeSessions[0].already_attended ? 'View Scanner Status' : 'Mark Attendance'}
             </span>
           </Link>
         </div>
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
             <span>Overall Attendance</span>
