@@ -48,7 +48,6 @@ const LiveAttendanceSession = () => {
   const [wsConnected, setWsConnected] = useState(false);
   const [projectorFullscreen, setProjectorFullscreen] = useState(false);
   const [tokenCountdown, setTokenCountdown] = useState(60);
-  const [manualReason, setManualReason] = useState('Verified present in classroom by lecturer');
   const [starting, setStarting] = useState(false);
 
   const wsRef = useRef(null);
@@ -243,25 +242,6 @@ const LiveAttendanceSession = () => {
     }
   };
 
-  const handleManualMark = async (studentId, newStatus) => {
-    if (!activeSession) return;
-    if (!manualReason.trim()) {
-      addToast('Please enter an audit reason before manual override.', 'error');
-      return;
-    }
-    try {
-      const res = await api.post(`/attendance/sessions/${activeSession.id}/records/`, {
-        student_id: studentId,
-        status: newStatus,
-        reason: manualReason.trim(),
-      });
-      addToast(res.data.message, 'success', 'Audit Log Recorded');
-      fetchSessionRecords(activeSession.id);
-    } catch (err) {
-      addToast(err.response?.data?.error || 'Could not update attendance.', 'error');
-    }
-  };
-
   const exportSessionCsv = () => {
     if (!activeSession) return;
     const headers = [
@@ -271,15 +251,12 @@ const LiveAttendanceSession = () => {
       'Status',
       'Verification',
       'Time',
-      'Remarks',
     ];
     const rows = roster.map((st) => {
       const verif =
-        st.verification_method === 'MANUAL'
-          ? 'Manual'
-          : st.verification_method === 'QR_FACE_VERIFIED' || st.biometric_verified
-          ? 'QR + Face Verified'
-          : st.verification_method || 'Absent';
+        st.verification_method === 'QR_FACE_VERIFIED' || st.biometric_verified
+          ? 'Face verified'
+          : 'Not yet present';
       const timeStr = st.timestamp ? new Date(st.timestamp).toLocaleTimeString() : '—';
       return [
         st.student_index_number,
@@ -288,7 +265,6 @@ const LiveAttendanceSession = () => {
         st.status,
         verif,
         timeStr,
-        st.remarks || '',
       ]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(',');
@@ -532,17 +508,17 @@ const LiveAttendanceSession = () => {
               )}
             </div>
 
-            {/* Real-Time Student Verification Feed & Manual Override Roster */}
+            {/* Real-Time Read-Only "Present in class" Live View */}
             <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 sm:p-6 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
                 <div>
                   <h3 className="text-base font-extrabold text-[#061430]">
-                    Live Attendance Roster &amp; Manual Override
+                    Present in class
                   </h3>
                   <p className="text-xs text-slate-500">
                     {wsConnected
-                      ? 'Live WebSocket stream active (1:1 Face + QR)'
-                      : 'Polling every 3s (1:1 Face + QR)'}
+                      ? 'Automatic live updates via WebSocket (read-only)'
+                      : 'Automatic polling every 3s (read-only)'}
                   </p>
                 </div>
 
@@ -615,7 +591,7 @@ const LiveAttendanceSession = () => {
                     },
                     {
                       key: 'ABSENT',
-                      label: `Absent (${roster.filter((r) => r.status === 'ABSENT').length})`,
+                      label: `Not yet present (${roster.filter((r) => r.status === 'ABSENT').length})`,
                     },
                     {
                       key: 'FAILED',
@@ -640,21 +616,7 @@ const LiveAttendanceSession = () => {
                 </div>
               </div>
 
-              {/* Audit Reason Input for Manual Marks */}
-              <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-200/70 flex flex-col sm:flex-row sm:items-center gap-3">
-                <span className="text-xs font-bold text-[#061430] shrink-0">
-                  Audit Trail Reason (for manual actions):
-                </span>
-                <input
-                  type="text"
-                  value={manualReason}
-                  onChange={(e) => setManualReason(e.target.value)}
-                  placeholder="Enter reason for manual attendance change..."
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-blue-600"
-                />
-              </div>
-
-              {/* Verification Failed List or Roster Table */}
+              {/* Verification Failed List or Read-Only Roster Table */}
               {rosterFilter === 'FAILED' ? (
                 <div className="space-y-2.5">
                   {failedVerifications.length === 0 ? (
@@ -674,29 +636,21 @@ const LiveAttendanceSession = () => {
                       .map((f) => (
                         <div
                           key={f.student_id}
-                          className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                          className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2.5"
                         >
-                          <div className="flex items-start gap-2.5">
-                            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-bold text-[#061430]">
-                                {f.student_name}{' '}
-                                <span className="font-mono text-xs text-blue-700">
-                                  ({f.student_index_number})
-                                </span>
-                              </p>
-                              <p className="text-xs text-red-700">
-                                {f.attempt_count} failed attempt{f.attempt_count === 1 ? '' : 's'} •{' '}
-                                {f.last_reason}
-                              </p>
-                            </div>
+                          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-[#061430]">
+                              {f.student_name}{' '}
+                              <span className="font-mono text-xs text-blue-700">
+                                ({f.student_index_number})
+                              </span>
+                            </p>
+                            <p className="text-xs text-red-700">
+                              {f.attempt_count} failed attempt{f.attempt_count === 1 ? '' : 's'} •{' '}
+                              {f.last_reason}
+                            </p>
                           </div>
-                          <button
-                            onClick={() => handleManualMark(f.student_id, 'PRESENT')}
-                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer self-start sm:self-center"
-                          >
-                            Manual Present
-                          </button>
                         </div>
                       ))
                   )}
@@ -710,7 +664,6 @@ const LiveAttendanceSession = () => {
                         <th className="py-3 px-4">Student, Dept &amp; Programme</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4">Verification &amp; Time</th>
-                        <th className="py-3 px-4 text-right">Manual Override (Audit Logged)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200/70 text-xs sm:text-sm">
@@ -788,26 +741,6 @@ const LiveAttendanceSession = () => {
                                     {new Date(st.timestamp).toLocaleTimeString()}
                                   </p>
                                 )}
-                              </td>
-                              <td className="py-3 px-4 text-right space-x-1">
-                                <button
-                                  onClick={() => handleManualMark(st.student_id, 'PRESENT')}
-                                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
-                                >
-                                  Present
-                                </button>
-                                <button
-                                  onClick={() => handleManualMark(st.student_id, 'ABSENT')}
-                                  className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition cursor-pointer"
-                                >
-                                  Absent
-                                </button>
-                                <button
-                                  onClick={() => handleManualMark(st.student_id, 'LATE')}
-                                  className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold transition cursor-pointer"
-                                >
-                                  Late
-                                </button>
                               </td>
                             </tr>
                           );

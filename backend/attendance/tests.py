@@ -239,24 +239,22 @@ class AttendXFullSystemTestSuite(APITestCase):
         exp_res = self.client.post("/api/attendance/scan/", {"token": token_obj.token})
         self.assertEqual(exp_res.status_code, status.HTTP_400_BAD_REQUEST)
 
-        # Lecturer manually marks student attendance and generates audit log
+        # Lecturer manual marking endpoints are disabled (403 / 404)
         self.authenticate_as("lecturer@ucc.edu.gh", "LecturerPassword123!")
         manual_res = self.client.post(
             f"/api/attendance/sessions/{session_id}/records/",
             {
                 "student_id": str(self.student.id),
                 "status": "LATE",
-                "reason": "Student phone battery died in lecture hall",
+                "reason": "Manual override attempt",
             },
         )
-        self.assertEqual(manual_res.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(
-            AuditLog.objects.filter(
-                session_id=session_id,
-                target_student=self.student,
-                action="MANUAL_MARK",
-            ).exists()
+        self.assertEqual(manual_res.status_code, status.HTTP_403_FORBIDDEN)
+        edit_res = self.client.patch(
+            f"/api/attendance/records/{session_id}/",
+            {"status": "PRESENT"},
         )
+        self.assertEqual(edit_res.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_04_reports_pdf_excel_and_admin_statistics(self):
         self.authenticate_as("admin@ucc.edu.gh", "AdminPassword123!")

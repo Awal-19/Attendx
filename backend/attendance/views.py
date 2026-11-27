@@ -595,29 +595,13 @@ class ScanQRAttendanceView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
-        # Non-biometric alternative path only sends a manual verification request to lecturer (never marks present)
+        # Non-biometric / manual alternative is disabled: attendance is strictly automatic upon 1:1 face verification
         if use_alternative:
-            if not config.allow_non_biometric_alternative:
-                return Response(
-                    {"error": "Non-biometric alternative is currently disabled by administrator policy."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            Notification.objects.create(
-                recipient=session.lecturer,
-                title=f"Manual Verification Requested: {session.course.code}",
-                message=(
-                    f"{user.full_name} ({student_profile.index_number}) requested manual verification "
-                    f"for {session.course.code} ({session.title}). Please verify in person."
-                ),
-                notification_type="SYSTEM",
-                related_course_code=session.course.code,
-            )
             return Response(
                 {
-                    "pending_manual_verification": True,
-                    "message": "Manual verification request sent to your lecturer. Please see your lecturer in class.",
+                    "error": "Manual verification is disabled. Attendance is recorded automatically after live 1:1 face verification."
                 },
-                status=status.HTTP_202_ACCEPTED,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Require registered facial template (server-side 1:1 enforcement)
@@ -963,153 +947,11 @@ class SessionRecordsListCreateView(APIView):
         )
 
     def post(self, request, pk):
-        if request.user.role not in ("LECTURER", "ADMIN") and not request.user.is_superuser:
-            return Response(
-                {"error": "Only Lecturers and Administrators can manually mark attendance."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        session = get_object_or_404(AttendanceSession.objects.select_related("course"), pk=pk)
-        auth_err = _check_session_ownership(request.user, session)
-        if auth_err is not None:
-            return auth_err
-        student_id = request.data.get("student_id")
-        from students.normalization import normalize_index_number
-        index_number = normalize_index_number(request.data.get("index_number"))
-        new_status = (request.data.get("status") or "PRESENT").upper()
-        reason = (request.data.get("reason") or "Manual verification by lecturer").strip()
-
-        if new_status not in ("PRESENT", "LATE", "EXCUSED", "ABSENT"):
-            return Response(
-                {"error": "Invalid attendance status."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        target_student = None
-        if student_id:
-            target_student = User.objects.filter(id=student_id, role="STUDENT").first()
-        elif index_number:
-            sp = StudentProfile.objects.filter(index_number__iexact=index_number).select_related("user").first()
-            if sp:
-                target_student = sp.user
-
-        if not target_student:
-            return Response(
-                {"error": "Student not found. Provide a valid student_id or index_number."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # Ensure student is enrolled in the course
-        CourseEnrollment.objects.get_or_create(
-            student=target_student,
-            course=session.course,
-            defaults={"semester": session.course.semester, "status": "ENROLLED"},
-        )
-
-        existing = AttendanceRecord.objects.filter(
-            session=session, student=target_student
-        ).first()
-        previous_status = existing.status if existing else "UNMARKED"
-
-        with transaction.atomic():
-            record, created = AttendanceRecord.objects.update_or_create(
-                session=session,
-                student=target_student,
-                defaults={
-                    "status": new_status,
-                    "verification_method": "MANUAL",
-                    "marked_by": request.user,
-                    "ip_address": get_client_ip(request),
-                    "remarks": reason,
-                },
-            )
-
-            AuditLog.objects.create(
-                actor=request.user,
-                action="MANUAL_MARK" if created else "STATUS_EDIT",
-                session=session,
-                attendance_record=record,
-                target_student=target_student,
-                previous_value=previous_status,
-                new_value=new_status,
-                reason=reason,
-                ip_address=get_client_ip(request),
-            )
-
-            Notification.objects.create(
-                recipient=target_student,
-                title=f"Attendance Record Updated: {session.course.code}",
-                message=(
-                    f"{request.user.full_name} updated your attendance status for {session.course.code} "
-                    f"({session.title}) to {new_status}. Reason: {reason}"
-                ),
-                notification_type="RECORD_UPDATED",
-                related_course_code=session.course.code,
-            )
-
-        record_data = AttendanceRecordSerializer(record).data
-        broadcast_session_event(
-            session,
-            "student_registered" if created else "record_updated",
-            {"record": record_data},
-        )
-
         return Response(
             {
-                "message": f"Attendance for {target_student.full_name} marked as {new_status}.",
-                "record": record_data,
+                "error": "Manual attendance marking is disabled. Attendance is recorded automatically upon 1:1 face verification."
             },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
-
-
-class AttendanceRecordDetailEditView(APIView):
-    permission_classes = [IsLecturerOrAdmin]
-
-    def patch(self, request, pk):
-        record = get_object_or_404(
-            AttendanceRecord.objects.select_related("session__course", "student"),
-            pk=pk,
-        )
-        new_status = (request.data.get("status") or record.status).upper()
-        reason = (request.data.get("reason") or request.data.get("remarks") or "Updated by lecturer").strip()
-
-        if new_status not in ("PRESENT", "LATE", "EXCUSED", "ABSENT"):
-            return Response(
-                {"error": "Invalid status value."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        prev_status = record.status
-        record.status = new_status
-        record.remarks = reason
-        record.marked_by = request.user
-        record.save()
-
-        AuditLog.objects.create(
-            actor=request.user,
-            action="STATUS_EDIT",
-            session=record.session,
-            attendance_record=record,
-            target_student=record.student,
-            previous_value=prev_status,
-            new_value=new_status,
-            reason=reason,
-            ip_address=get_client_ip(request),
-        )
-
-        record_data = AttendanceRecordSerializer(record).data
-        broadcast_session_event(
-            record.session,
-            "record_updated",
-            {"record": record_data},
-        )
-
-        return Response(
-            {
-                "message": "Attendance record updated with audit trail.",
-                "record": record_data,
-            }
+            status=status.HTTP_403_FORBIDDEN,
         )
 
 

@@ -471,14 +471,6 @@ const ScanAttendance = () => {
           <div className="flex-1">
             <p className="font-bold">Verification Unsuccessful</p>
             <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
-            {(lastAttemptId || faceStep) && (
-              <button
-                onClick={handleRequestAlternativeOrDispute}
-                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer"
-              >
-                Request Manual Lecturer Verification
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -613,14 +605,6 @@ const ScanAttendance = () => {
 
                 <button
                   type="button"
-                  onClick={handleRequestAlternativeOrDispute}
-                  className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-blue-100 text-xs font-semibold cursor-pointer"
-                >
-                  Request manual lecturer verification
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => {
                     setFaceStep(null);
                     stopFaceCamera();
@@ -639,13 +623,6 @@ const ScanAttendance = () => {
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Retry Camera Access</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleRequestAlternativeOrDispute}
-                className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-blue-100 text-xs font-semibold cursor-pointer"
-              >
-                Request manual lecturer verification
               </button>
             </div>
           )}
