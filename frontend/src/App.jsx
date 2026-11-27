@@ -14,6 +14,7 @@ import StudentRegisterPage from './pages/public/StudentRegisterPage';
 import LecturerRegisterPage from './pages/public/LecturerRegisterPage';
 import ForgotPasswordPage from './pages/public/ForgotPasswordPage';
 import NotFoundPage from './pages/public/NotFoundPage';
+import QrScanLandingPage from './pages/student/QrScanLandingPage';
 
 // Student Pages
 import StudentDashboard from './pages/student/StudentDashboard';
@@ -82,6 +83,8 @@ const App = () => {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/lecturer/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/a/:token" element={<QrScanLandingPage />} />
+            <Route path="/scan" element={<QrScanLandingPage />} />
 
             {/* Student Portal Routes */}
             <Route path="/student/dashboard" element={withLayout(StudentDashboard, ['STUDENT'])} />

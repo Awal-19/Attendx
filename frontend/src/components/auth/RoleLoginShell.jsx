@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Mail,
   Lock,
@@ -56,6 +56,12 @@ const RoleLoginShell = ({
   const { user, login, logout } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawNext = searchParams.get('next') || '';
+  const safeNext =
+    rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('://')
+      ? rawNext
+      : null;
 
   useEffect(() => {
     const prevTitle = document.title;
@@ -93,7 +99,9 @@ const RoleLoginShell = ({
     try {
       const loggedInUser = await login(identifier.trim(), password, roleKey);
       addToast(`Welcome back, ${loggedInUser.full_name}!`, 'success', 'Authentication Verified');
-      navigate(getRoleHomePath(loggedInUser.role), { replace: true });
+      const targetPath =
+        roleKey === 'student' && safeNext ? safeNext : getRoleHomePath(loggedInUser.role);
+      navigate(targetPath, { replace: true });
     } catch (err) {
       const msg =
         err.response?.data?.non_field_errors?.[0] ||

@@ -23,6 +23,7 @@ def build_qr_image_base64(payload_str):
 
 
 class QRTokenSerializer(serializers.ModelSerializer):
+    qr_url = serializers.SerializerMethodField()
     qr_image_base64 = serializers.SerializerMethodField()
     seconds_remaining = serializers.SerializerMethodField()
 
@@ -32,6 +33,7 @@ class QRTokenSerializer(serializers.ModelSerializer):
             "id",
             "session",
             "token",
+            "qr_url",
             "signature",
             "created_at",
             "expires_at",
@@ -41,8 +43,13 @@ class QRTokenSerializer(serializers.ModelSerializer):
             "qr_image_base64",
         ]
 
+    def get_qr_url(self, obj):
+        from django.conf import settings
+        base = getattr(settings, "APP_BASE_URL", "https://attendx-ucc-portal.netlify.app").rstrip("/")
+        return f"{base}/a/{obj.token}"
+
     def get_qr_image_base64(self, obj):
-        return build_qr_image_base64(obj.token)
+        return build_qr_image_base64(self.get_qr_url(obj))
 
     def get_seconds_remaining(self, obj):
         if not obj.is_valid:

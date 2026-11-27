@@ -428,6 +428,7 @@ ADMIN_SESSION_LIFETIME_MINUTES = int(os.getenv("ADMIN_SESSION_LIFETIME_MINUTES",
 LECTURER_SESSION_LIFETIME_MINUTES = int(os.getenv("LECTURER_SESSION_LIFETIME_MINUTES", "120"))
 
 # QR Security Settings
+APP_BASE_URL = os.getenv("APP_BASE_URL", "https://attendx-ucc-portal.netlify.app").rstrip("/")
 QR_TOKEN_DEFAULT_EXPIRY_SECONDS = int(
     os.getenv("QR_TOKEN_DEFAULT_EXPIRY_SECONDS", "60")
 )

@@ -73,6 +73,7 @@ def broadcast_session_event(session, event_type, extra_data=None):
 
 class AttendanceSessionListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [BiometricVerifyThrottle]
 
     def get(self, request):
         user = request.user
@@ -197,6 +198,7 @@ class AttendanceSessionListCreateView(APIView):
 
 class AttendanceSessionDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [BiometricVerifyThrottle]
 
     def get(self, request, pk):
         session = get_object_or_404(
@@ -301,6 +303,29 @@ class CloseAttendanceSessionView(APIView):
         )
 
 
+def extract_qr_token(raw_value: str) -> str:
+    """
+    Accepts either a raw token ('ATX.<nonce>.<sig24>') or a full URL
+    ('https://<domain>/a/ATX.<nonce>.<sig24>' or '/scan?t=ATX.<nonce>.<sig24>').
+    """
+    val = (raw_value or "").strip()
+    if not val:
+        return ""
+    if "://" in val or val.startswith("/"):
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(val)
+        qs = parse_qs(parsed.query)
+        if qs.get("t"):
+            return qs["t"][0].strip()
+        if qs.get("token"):
+            return qs["token"][0].strip()
+        path = parsed.path.rstrip("/")
+        if "/a/" in path:
+            return path.split("/a/", 1)[1].split("/", 1)[0].strip()
+    return val
+
+
 def _validate_qr_and_student_eligibility(request):
     """
     Shared Step 3-4 validation for both ValidateQRAttendanceView and ScanQRAttendanceView.
@@ -308,8 +333,14 @@ def _validate_qr_and_student_eligibility(request):
     """
     user = request.user
     if user.role != "STUDENT":
+        AuditLog.objects.create(
+            actor=user,
+            action="SECURITY_ALERT",
+            reason=f"Non-student role ({user.role}) attempted to scan attendance QR.",
+            ip_address=get_client_ip(request),
+        )
         return None, Response(
-            {"error": "Only authenticated Student accounts can scan classroom attendance QR codes."},
+            {"error": "Only students can mark attendance."},
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -345,7 +376,7 @@ def _validate_qr_and_student_eligibility(request):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-    raw_token = (request.data.get("token") or request.data.get("qr_token") or "").strip()
+    raw_token = extract_qr_token(request.data.get("token") or request.data.get("qr_token") or "")
     if not raw_token:
         return None, Response(
             {"error": "QR token is required. Please scan a valid AttendX classroom QR code."},
@@ -354,6 +385,12 @@ def _validate_qr_and_student_eligibility(request):
 
     qr_token = QRToken.objects.select_related("session__course").filter(token=raw_token).first()
     if not qr_token:
+        AuditLog.objects.create(
+            actor=user,
+            action="QR_SCAN_FAILED",
+            reason="Unrecognized QR token submitted.",
+            ip_address=get_client_ip(request),
+        )
         return None, Response(
             {"error": "Invalid QR token. This code is not recognized by AttendX."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -418,6 +455,7 @@ class ValidateQRAttendanceView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [BiometricVerifyThrottle]
 
     def post(self, request):
         ctx, err_resp = _validate_qr_and_student_eligibility(request)
@@ -463,6 +501,7 @@ class ScanQRAttendanceView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [BiometricVerifyThrottle]
     throttle_classes = [BiometricVerifyThrottle]
 
     def post(self, request):
@@ -751,6 +790,7 @@ class SessionRecordsListCreateView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [BiometricVerifyThrottle]
 
     def get(self, request, pk):
         session = get_object_or_404(

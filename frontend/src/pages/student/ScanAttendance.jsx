@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   QrCode,
@@ -18,9 +18,30 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
+const extractQrToken = (rawValue) => {
+  const val = (rawValue || '').trim();
+  if (!val) return '';
+  if (val.includes('://') || val.startsWith('/')) {
+    try {
+      const url = new URL(val, window.location.origin);
+      const qToken = url.searchParams.get('t') || url.searchParams.get('token');
+      if (qToken) return qToken.trim();
+      const idx = url.pathname.indexOf('/a/');
+      if (idx !== -1) {
+        return url.pathname.slice(idx + 3).split('/')[0].trim();
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return val;
+};
+
 const ScanAttendance = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
+  const [searchParams] = useSearchParams();
+  const autoScannedRef = useRef(false);
 
   const [cameraActive, setCameraActive] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -49,6 +70,13 @@ const ScanAttendance = () => {
   }, [scanResult]);
 
   useEffect(() => {
+    const initialToken = searchParams.get('t') || searchParams.get('token');
+    if (initialToken && !autoScannedRef.current) {
+      autoScannedRef.current = true;
+      const extracted = extractQrToken(initialToken);
+      setTokenInput(extracted);
+      verifyAttendanceToken(extracted);
+    }
     return () => {
       if (scannerRef.current) {
         scannerRef.current
@@ -104,7 +132,7 @@ const ScanAttendance = () => {
   };
 
   const verifyAttendanceToken = async (rawToken) => {
-    const cleanToken = (rawToken || '').trim();
+    const cleanToken = extractQrToken(rawToken);
     if (!cleanToken) {
       addToast('Please scan or enter a valid AttendX QR token.', 'error');
       return;
