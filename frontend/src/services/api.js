@@ -2,6 +2,32 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
+export const getPortalScope = (pathname = window.location.pathname) => {
+  const p = (pathname || '').toLowerCase();
+  if (p.startsWith('/lecturer') || p.startsWith('/register/lecturer') || p.startsWith('/login/lecturer')) {
+    return 'lecturer';
+  }
+  if (p.startsWith('/admin') || p.startsWith('/login/admin')) {
+    return 'admin';
+  }
+  return 'student';
+};
+
+export const getScopedItem = (baseKey, scope = getPortalScope()) =>
+  localStorage.getItem(`${baseKey}_${scope}`);
+
+export const setScopedAuth = (scope, userData, tokens) => {
+  if (tokens?.access) localStorage.setItem(`attendx_access_token_${scope}`, tokens.access);
+  if (tokens?.refresh) localStorage.setItem(`attendx_refresh_token_${scope}`, tokens.refresh);
+  if (userData) localStorage.setItem(`attendx_user_${scope}`, JSON.stringify(userData));
+};
+
+export const clearScopedAuth = (scope = getPortalScope()) => {
+  localStorage.removeItem(`attendx_access_token_${scope}`);
+  localStorage.removeItem(`attendx_refresh_token_${scope}`);
+  localStorage.removeItem(`attendx_user_${scope}`);
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -12,7 +38,7 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('attendx_access_token');
+    const token = getScopedItem('attendx_access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -25,37 +51,32 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const scope = getPortalScope();
     if (
       error.response &&
       error.response.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes('/auth/login/') &&
+      !originalRequest.url.includes('/login/') &&
       !originalRequest.url.includes('/auth/token/refresh/')
     ) {
       originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('attendx_refresh_token');
+      const refreshToken = getScopedItem('attendx_refresh_token', scope);
       if (refreshToken) {
         try {
           const res = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, {
             refresh: refreshToken,
           });
           const newAccess = res.data.access;
-          localStorage.setItem('attendx_access_token', newAccess);
+          localStorage.setItem(`attendx_access_token_${scope}`, newAccess);
           if (res.data.refresh) {
-            localStorage.setItem('attendx_refresh_token', res.data.refresh);
+            localStorage.setItem(`attendx_refresh_token_${scope}`, res.data.refresh);
           }
           originalRequest.headers.Authorization = `Bearer ${newAccess}`;
           return api(originalRequest);
         } catch (refreshError) {
-          localStorage.removeItem('attendx_access_token');
-          localStorage.removeItem('attendx_refresh_token');
-          localStorage.removeItem('attendx_user');
-          const p = window.location.pathname.toLowerCase();
-          window.location.href = p.startsWith('/lecturer')
-            ? '/lecturer'
-            : p.startsWith('/admin')
-              ? '/admin'
-              : '/login';
+          clearScopedAuth(scope);
+          window.location.href =
+            scope === 'lecturer' ? '/lecturer' : scope === 'admin' ? '/admin' : '/login';
         }
       }
     }
@@ -64,7 +85,7 @@ api.interceptors.response.use(
 );
 
 export const getWebSocketUrl = (sessionId) => {
-  const token = localStorage.getItem('attendx_access_token') || '';
+  const token = getScopedItem('attendx_access_token') || '';
   const wsBase =
     import.meta.env.VITE_WS_BASE_URL ||
     `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:8000`;
@@ -72,7 +93,7 @@ export const getWebSocketUrl = (sessionId) => {
 };
 
 export const getNotificationWebSocketUrl = () => {
-  const token = localStorage.getItem('attendx_access_token') || '';
+  const token = getScopedItem('attendx_access_token') || '';
   const wsBase =
     import.meta.env.VITE_WS_BASE_URL ||
     `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:8000`;
@@ -80,4 +101,3 @@ export const getNotificationWebSocketUrl = () => {
 };
 
 export default api;
-

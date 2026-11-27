@@ -1,11 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api from '../services/api';
+import api, {
+  clearScopedAuth,
+  getPortalScope,
+  getScopedItem,
+  setScopedAuth,
+} from '../services/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('attendx_user');
+    const saved = getScopedItem('attendx_user');
     try {
       return saved ? JSON.parse(saved) : null;
     } catch {
@@ -15,7 +20,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const refreshProfile = useCallback(async () => {
-    const token = localStorage.getItem('attendx_access_token');
+    const scope = getPortalScope();
+    const token = getScopedItem('attendx_access_token', scope);
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -24,12 +30,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.get('/auth/profile/');
       setUser(res.data);
-      localStorage.setItem('attendx_user', JSON.stringify(res.data));
+      localStorage.setItem(`attendx_user_${scope}`, JSON.stringify(res.data));
       return res.data;
     } catch {
-      localStorage.removeItem('attendx_access_token');
-      localStorage.removeItem('attendx_refresh_token');
-      localStorage.removeItem('attendx_user');
+      clearScopedAuth(scope);
       setUser(null);
       return null;
     } finally {
@@ -42,25 +46,23 @@ export const AuthProvider = ({ children }) => {
   }, [refreshProfile]);
 
   const login = async (identifier, password, roleKey = 'student') => {
+    const scope = roleKey || getPortalScope();
     const endpoint = roleKey ? `/auth/${roleKey}/login/` : '/auth/login/';
     const res = await api.post(endpoint, { identifier, password });
     const { user: userData, tokens } = res.data;
-    localStorage.setItem('attendx_access_token', tokens.access);
-    localStorage.setItem('attendx_refresh_token', tokens.refresh);
-    localStorage.setItem('attendx_user', JSON.stringify(userData));
+    setScopedAuth(scope, userData, tokens);
     setUser(userData);
     return userData;
   };
 
   const register = async (payload) => {
+    const scope = payload?.role === 'LECTURER' ? 'lecturer' : 'student';
     const res = await api.post('/auth/register/', payload);
     if (res.data?.requires_otp) {
       return res.data;
     }
     const { user: userData, tokens } = res.data;
-    localStorage.setItem('attendx_access_token', tokens.access);
-    localStorage.setItem('attendx_refresh_token', tokens.refresh);
-    localStorage.setItem('attendx_user', JSON.stringify(userData));
+    setScopedAuth(scope, userData, tokens);
     setUser(userData);
     return userData;
   };
@@ -68,15 +70,14 @@ export const AuthProvider = ({ children }) => {
   const verifyRegistrationOtp = async (index_number, code) => {
     const res = await api.post('/auth/register/verify-otp/', { index_number, code });
     const { user: userData, tokens } = res.data;
-    localStorage.setItem('attendx_access_token', tokens.access);
-    localStorage.setItem('attendx_refresh_token', tokens.refresh);
-    localStorage.setItem('attendx_user', JSON.stringify(userData));
+    setScopedAuth('student', userData, tokens);
     setUser(userData);
     return userData;
   };
 
   const logout = async () => {
-    const refresh = localStorage.getItem('attendx_refresh_token');
+    const scope = getPortalScope();
+    const refresh = getScopedItem('attendx_refresh_token', scope);
     const role = user?.role;
     const redirectPath =
       role === 'LECTURER' ? '/lecturer' : role === 'ADMIN' || role === 'DEPT_ADMIN' ? '/admin' : '/login';
@@ -85,9 +86,7 @@ export const AuthProvider = ({ children }) => {
     } catch {
       // Ignore logout network error
     } finally {
-      localStorage.removeItem('attendx_access_token');
-      localStorage.removeItem('attendx_refresh_token');
-      localStorage.removeItem('attendx_user');
+      clearScopedAuth(scope);
       setUser(null);
     }
     return redirectPath;
@@ -116,4 +115,3 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 };
-
