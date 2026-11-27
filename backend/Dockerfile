@@ -23,3 +23,4 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 7860
 
 CMD ["sh", "-c", "python manage.py migrate --noinput && daphne -b 0.0.0.0 -p ${PORT:-7860} attendx_core.asgi:application"]
+
