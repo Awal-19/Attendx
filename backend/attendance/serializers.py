@@ -159,6 +159,8 @@ class AttendanceSessionSerializer(serializers.ModelSerializer):
             "end_time",
             "duration_minutes",
             "qr_refresh_seconds",
+            "restrict_single_device",
+            "restrict_single_device",
             "status",
             "is_currently_active",
             "seconds_remaining",

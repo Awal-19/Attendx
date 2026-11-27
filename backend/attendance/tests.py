@@ -1,10 +1,14 @@
 from datetime import timedelta
+from unittest.mock import patch, MagicMock
+import numpy as np
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework import status
 
 from accounts.models import User
-from students.models import StudentProfile
+from students.models import StudentProfile, UniversityStudentRecord
+from biometrics.models import StudentBiometricProfile, BiometricConsent, FaceVerificationAttempt
+from biometrics.encryption import encrypt_embedding
 from lecturers.models import LecturerProfile
 from academics.models import Department, Programme, AcademicYear, Semester, Course, CourseEnrollment
 from attendance.models import AttendanceSession, QRToken, AttendanceRecord, AuditLog
@@ -79,6 +83,20 @@ class AttendXFullSystemTestSuite(APITestCase):
         )
 
         # Create Enrolled Student
+        UniversityStudentRecord.objects.create(
+            index_number="PS/CSC/22/0001",
+            full_name="Kofi Asante",
+            department=self.dept,
+            programme=self.prog,
+            academic_level="300",
+        )
+        UniversityStudentRecord.objects.create(
+            index_number="PS/CSC/22/0099",
+            full_name="Ama Mensah",
+            department=self.dept,
+            programme=self.prog,
+            academic_level="300",
+        )
         self.student = User.objects.create_user(
             email="student1@stu.ucc.edu.gh",
             full_name="Kofi Asante",
@@ -159,8 +177,33 @@ class AttendXFullSystemTestSuite(APITestCase):
         )
         self.assertEqual(spoof_res.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Valid QR scan
-        scan_res = self.client.post("/api/attendance/scan/", {"token": qr_token_str})
+        # Enroll face and perform valid QR + Face scan
+        vec = np.ones(128, dtype=np.float32)
+        vec = vec / np.linalg.norm(vec)
+        enc_blob, checksum = encrypt_embedding(vec)
+        BiometricConsent.objects.create(student=self.student, consent_given=True)
+        StudentBiometricProfile.objects.create(
+            student=self.student,
+            enrollment_status="ENROLLED",
+            liveness_enabled=True,
+            encrypted_template=enc_blob,
+            template_checksum=checksum,
+            quality_score=0.9,
+        )
+        fake_img = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_provider = MagicMock()
+        mock_provider.analyze_frame.return_value = MagicMock(ok=True, embedding=vec, quality_score=0.9)
+        mock_provider.check_liveness.return_value = MagicMock(passed=True, score=0.95, reason="")
+        mock_provider.compare_embeddings.return_value = 0.85
+
+        with patch("attendance.views.decode_base64_image", return_value=fake_img), patch(
+            "attendance.views.get_face_provider", return_value=mock_provider
+        ):
+            scan_res = self.client.post(
+                "/api/attendance/scan/",
+                {"token": qr_token_str, "frames": ["data:image/jpeg;base64,abc"], "challenge": "HEAD_NOD"},
+                format="json",
+            )
         self.assertEqual(scan_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(scan_res.data["record"]["status"], "PRESENT")
 
@@ -228,4 +271,113 @@ class AttendXFullSystemTestSuite(APITestCase):
         excel_res = self.client.get("/api/reports/attendance/excel/")
         self.assertEqual(excel_res.status_code, status.HTTP_200_OK)
         self.assertIn("spreadsheetml", excel_res["Content-Type"])
+
+    def test_05_mandatory_face_enforcement_and_lockout(self):
+        # Lecturer creates session
+        self.authenticate_as("lecturer@ucc.edu.gh", "LecturerPassword123!")
+        sess_res = self.client.post(
+            "/api/attendance/sessions/",
+            {"course": str(self.course.id), "title": "Face Check Lecture", "duration_minutes": 30},
+        )
+        self.assertEqual(sess_res.status_code, status.HTTP_201_CREATED)
+        session_id = sess_res.data["session"]["id"]
+        qr_token = sess_res.data["qr_token"]["token"]
+        self.assertIn("/a/ATX.", sess_res.data["qr_token"]["qr_url"])
+
+        # Lecturer cannot mark attendance via scan endpoint
+        lec_scan = self.client.post("/api/attendance/scan/", {"token": qr_token})
+        self.assertEqual(lec_scan.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(lec_scan.data["error"], "Only students can mark attendance.")
+
+        # Unenrolled face student cannot mark attendance even with spoofed verified=True
+        self.authenticate_as("student1@stu.ucc.edu.gh", "StudentPassword123!")
+        no_face_res = self.client.post(
+            "/api/attendance/scan/",
+            {"token": qr_token, "verified": True},
+        )
+        self.assertEqual(no_face_res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(no_face_res.data["error_code"], "FACE_NOT_REGISTERED")
+
+        # Enroll student biometric template
+        vec = np.ones(128, dtype=np.float32)
+        vec = vec / np.linalg.norm(vec)
+        enc_blob, checksum = encrypt_embedding(vec)
+        BiometricConsent.objects.create(student=self.student, consent_given=True)
+        StudentBiometricProfile.objects.create(
+            student=self.student,
+            enrollment_status="ENROLLED",
+            liveness_enabled=True,
+            encrypted_template=enc_blob,
+            template_checksum=checksum,
+            quality_score=0.9,
+        )
+
+        # Direct API call without frames is rejected
+        no_frames = self.client.post(
+            "/api/attendance/scan/",
+            {"token": qr_token, "verified": True},
+        )
+        self.assertEqual(no_frames.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(no_frames.data["error_code"], "FACE_FRAMES_REQUIRED")
+
+        # Mock face provider for mismatch -> 3 failures lock out 4th attempt
+        FaceVerificationAttempt.objects.filter(student=self.student, session_id=session_id).delete()
+        fake_img = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_provider = MagicMock()
+        mock_analysis = MagicMock(ok=True, embedding=vec, quality_score=0.9)
+        mock_provider.analyze_frame.return_value = mock_analysis
+        mock_provider.check_liveness.return_value = MagicMock(passed=True, score=0.95, reason="")
+        mock_provider.compare_embeddings.return_value = 0.10  # below 0.38 threshold
+
+        with patch("attendance.views.decode_base64_image", return_value=fake_img), patch(
+            "attendance.views.get_face_provider", return_value=mock_provider
+        ):
+            for _ in range(3):
+                fail_res = self.client.post(
+                    "/api/attendance/scan/",
+                    {"token": qr_token, "frames": ["data:image/jpeg;base64,abc"], "challenge": "HEAD_NOD"},
+                    format="json",
+                )
+                self.assertEqual(fail_res.status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(fail_res.data["error_code"], "FACE_MISMATCH")
+
+            locked_res = self.client.post(
+                "/api/attendance/scan/",
+                {"token": qr_token, "frames": ["data:image/jpeg;base64,abc"], "challenge": "HEAD_NOD"},
+                format="json",
+            )
+            self.assertEqual(locked_res.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+            self.assertEqual(locked_res.data["error_code"], "FACE_ATTEMPTS_LOCKED")
+
+        # Lecturer sees student in failed_verifications
+        self.authenticate_as("lecturer@ucc.edu.gh", "LecturerPassword123!")
+        rec_res = self.client.get(f"/api/attendance/sessions/{session_id}/records/")
+        self.assertEqual(rec_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(rec_res.data["failed_verifications"]), 1)
+        self.assertEqual(rec_res.data["failed_verifications"][0]["attempt_count"], 3)
+
+        # Clear failed attempts and test matching face -> 201 PRESENT + duplicate -> 409
+        FaceVerificationAttempt.objects.filter(student=self.student, session_id=session_id).delete()
+        self.authenticate_as("student1@stu.ucc.edu.gh", "StudentPassword123!")
+        mock_provider.compare_embeddings.return_value = 0.85
+        with patch("attendance.views.decode_base64_image", return_value=fake_img), patch(
+            "attendance.views.get_face_provider", return_value=mock_provider
+        ):
+            ok_res = self.client.post(
+                "/api/attendance/scan/",
+                {"token": qr_token, "frames": ["data:image/jpeg;base64,abc"], "challenge": "HEAD_NOD"},
+                format="json",
+            )
+            self.assertEqual(ok_res.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(ok_res.data["record"]["status"], "PRESENT")
+            self.assertTrue(ok_res.data["student_verification"]["biometric_verified"])
+
+            dup_res = self.client.post(
+                "/api/attendance/scan/",
+                {"token": qr_token, "frames": ["data:image/jpeg;base64,abc"]},
+                format="json",
+            )
+            self.assertEqual(dup_res.status_code, status.HTTP_409_CONFLICT)
+            self.assertTrue(dup_res.data["already_marked"])
+
 

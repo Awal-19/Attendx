@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from accounts.permissions import IsAdminUserRole
+from accounts.permissions import IsAdminUserRole, IsLecturerOrAdmin
 from academics.models import CourseEnrollment
 from attendance.models import AttendanceRecord, AuditLog
 from notifications.models import Notification
@@ -161,16 +161,24 @@ class FaceEnrollmentView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        raw_frames = request.data.get("frames") or []
-        if not isinstance(raw_frames, list) or len(raw_frames) < 2:
+        profile, _ = StudentBiometricProfile.objects.get_or_create(student=user)
+        if profile.enrollment_status == "ENROLLED" and profile.encrypted_template:
             return Response(
-                {"error": "Please capture at least 2 clear facial frames for enrollment."},
+                {
+                    "error": "Face ID is already enrolled for this account. Re-enrollment requires lecturer or administrator approval."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        raw_frames = request.data.get("frames") or []
+        if not isinstance(raw_frames, list) or len(raw_frames) < 3:
+            return Response(
+                {"error": "Please capture at least 3 clear facial frames (front, slight left, slight right) for enrollment."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         config = BiometricSystemConfig.get_active()
         provider = get_face_provider()
-        profile, _ = StudentBiometricProfile.objects.get_or_create(student=user)
 
         embeddings = []
         qualities = []
@@ -197,8 +205,8 @@ class FaceEnrollmentView(APIView):
             else:
                 last_error = (analysis.error_code, analysis.error_message)
 
-        if len(embeddings) < 2:
-            reason = last_error[1] or "Could not extract enough high-quality facial frames."
+        if len(embeddings) < 3:
+            reason = last_error[1] or "Could not extract enough high-quality facial frames (minimum 3 required)."
             FaceEnrollment.objects.create(
                 student=user,
                 biometric_profile=profile,
@@ -450,4 +458,76 @@ class AdminPurgeExpiredTemplatesView(APIView):
             template_checksum="",
         )
         return Response({"message": f"Purged {count} expired biometric template(s).", "purged_count": count})
+
+
+class DeleteOwnBiometricDataView(APIView):
+    """
+    Allows a student to delete their encrypted facial template on request (Ghana Data Protection Act, 2012).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        user = request.user
+        profile = StudentBiometricProfile.objects.filter(student=user).first()
+        if profile:
+            profile.enrollment_status = "DELETED"
+            profile.encrypted_template = None
+            profile.template_checksum = ""
+            profile.save(update_fields=["enrollment_status", "encrypted_template", "template_checksum", "updated_at"])
+
+        BiometricConsent.objects.filter(student=user, revoked_at__isnull=True).update(
+            revoked_at=timezone.now()
+        )
+        AuditLog.objects.create(
+            actor=user,
+            action="RECORD_DELETED",
+            target_student=user,
+            reason="Student requested deletion of biometric face template (Data Protection Act, 2012).",
+            ip_address=_get_client_ip(request),
+        )
+        return Response({"message": "Your encrypted biometric template has been permanently deleted."})
+
+
+class ResetStudentBiometricView(APIView):
+    """
+    Allows lecturers or administrators to reset a student's biometric enrollment so they can re-enroll.
+    """
+
+    permission_classes = [IsLecturerOrAdmin]
+
+    @transaction.atomic
+    def post(self, request, student_id):
+        profile = get_object_or_404(StudentBiometricProfile, student_id=student_id)
+        prev_status = profile.enrollment_status
+        profile.enrollment_status = "NOT_ENROLLED"
+        profile.encrypted_template = None
+        profile.template_checksum = ""
+        profile.enrolled_at = None
+        profile.save(
+            update_fields=[
+                "enrollment_status",
+                "encrypted_template",
+                "template_checksum",
+                "enrolled_at",
+                "updated_at",
+            ]
+        )
+        AuditLog.objects.create(
+            actor=request.user,
+            action="STATUS_EDIT",
+            target_student=profile.student,
+            previous_value=prev_status,
+            new_value="NOT_ENROLLED",
+            reason=(request.data.get("reason") or "Biometric re-enrollment approved by lecturer/admin").strip(),
+            ip_address=_get_client_ip(request),
+        )
+        Notification.objects.create(
+            recipient=profile.student,
+            title="Face ID Reset Approved",
+            message="Your Face ID enrollment has been reset. You may now enroll a new Face ID template.",
+            notification_type="SYSTEM",
+        )
+        return Response({"message": f"Biometric enrollment reset for {profile.student.full_name}."})
 

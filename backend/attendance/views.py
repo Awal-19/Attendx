@@ -130,6 +130,7 @@ class AttendanceSessionListCreateView(APIView):
 
         duration_minutes = int(request.data.get("duration_minutes", 30))
         qr_refresh_seconds = int(request.data.get("qr_refresh_seconds", 60))
+        restrict_single_device = bool(request.data.get("restrict_single_device", False))
         title = (request.data.get("title") or f"{course.code} Lecture Attendance").strip()
         topic = (request.data.get("topic") or "Scheduled Classroom Lecture").strip()
         default_venue = (
@@ -154,6 +155,7 @@ class AttendanceSessionListCreateView(APIView):
                 end_time=end_time,
                 duration_minutes=duration_minutes,
                 qr_refresh_seconds=qr_refresh_seconds,
+                restrict_single_device=restrict_single_device,
                 status="ACTIVE",
             )
             qr_token = QRToken.generate_for_session(
@@ -436,10 +438,19 @@ def _validate_qr_and_student_eligibility(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    if AttendanceRecord.objects.filter(session=session, student=user).exists():
+    existing_rec = AttendanceRecord.objects.filter(session=session, student=user).first()
+    if existing_rec:
+        marked_time = timezone.localtime(existing_rec.timestamp).strftime("%I:%M %p").lstrip("0")
         return None, Response(
             {
-                "error": f"Duplicate Attendance Rejected: Your attendance for {session.course.code} in this session has already been recorded."
+                "error": f"You're already marked present ({marked_time}).",
+                "already_marked": True,
+                "recorded_at": existing_rec.timestamp.isoformat(),
+                "marked_time": marked_time,
+                "course_code": session.course.code,
+                "course_title": session.course.title,
+                "student_name": user.full_name,
+                "student_index_number": student_profile.index_number,
             },
             status=status.HTTP_409_CONFLICT,
         )
@@ -462,10 +473,25 @@ class ValidateQRAttendanceView(APIView):
         if err_resp is not None:
             return err_resp
 
-        user, _, _, session = ctx
+        user, student_profile, _, session = ctx
         config = BiometricSystemConfig.get_active()
         bp = StudentBiometricProfile.objects.filter(student=user).first()
         enrollment_status = bp.enrollment_status if bp else "NOT_ENROLLED"
+
+        # Check 3-attempt lockout window (5 minutes)
+        lock_window = timezone.now() - timedelta(minutes=5)
+        recent_failures = FaceVerificationAttempt.objects.filter(
+            student=user, session=session, created_at__gte=lock_window
+        ).exclude(result="SUCCESS").count()
+        if recent_failures >= 3:
+            return Response(
+                {
+                    "error": "Face verification temporarily locked after 3 failed attempts. Please see your lecturer for manual verification.",
+                    "error_code": "FACE_ATTEMPTS_LOCKED",
+                    "attempts_used": recent_failures,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
 
         challenges = [
             ("HEAD_TURN_LEFT", "Gently turn your head slightly to the left, then look straight."),
@@ -483,10 +509,18 @@ class ValidateQRAttendanceView(APIView):
                     "course_title": session.course.title,
                     "title": session.title,
                     "venue": session.venue,
+                    "restrict_single_device": bool(session.restrict_single_device),
+                },
+                "student": {
+                    "full_name": user.full_name,
+                    "index_number": student_profile.index_number,
                 },
                 "biometric_status": enrollment_status,
+                "restrict_single_device": bool(session.restrict_single_device),
                 "requires_face_verification": enrollment_status == "ENROLLED",
-                "face_registration_required": enrollment_status == "NOT_ENROLLED",
+                "face_registration_required": enrollment_status != "ENROLLED",
+                "attempts_used": recent_failures,
+                "attempts_remaining": max(0, 3 - recent_failures),
                 "liveness_required": config.liveness_required,
                 "liveness_challenge": challenge_code,
                 "liveness_instruction": f"Position your face inside the frame. {challenge_instruction}",
@@ -512,6 +546,27 @@ class ScanQRAttendanceView(APIView):
         user, student_profile, qr_token, session = ctx
         client_ip = get_client_ip(request)
         device_info = request.data.get("device_info") or request.META.get("HTTP_USER_AGENT", "")[:250]
+        device_id = (request.data.get("device_id") or "").strip()[:128]
+
+        if session.restrict_single_device:
+            if not device_id:
+                return Response(
+                    {"error": "Device verification is required for this session."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if AttendanceRecord.objects.filter(session=session, device_id=device_id).exclude(student=user).exists():
+                AuditLog.objects.create(
+                    actor=user,
+                    action="SECURITY_ALERT",
+                    session=session,
+                    target_student=user,
+                    reason=f"Single-device restriction triggered: device {device_id[:16]} already used.",
+                    ip_address=client_ip,
+                )
+                return Response(
+                    {"error": "This device has already been used by another student for this session."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         config = BiometricSystemConfig.get_active()
         bp = StudentBiometricProfile.objects.filter(student=user).first()
@@ -525,7 +580,22 @@ class ScanQRAttendanceView(APIView):
         verification_method = "QR_SCAN"
         biometric_verified = False
 
-        # Non-biometric alternative path for students who declined biometric consent
+        lock_window = timezone.now() - timedelta(minutes=5)
+        recent_failures = FaceVerificationAttempt.objects.filter(
+            student=user, session=session, created_at__gte=lock_window
+        ).exclude(result="SUCCESS").count()
+        if recent_failures >= 3:
+            return Response(
+                {
+                    "error": "Too many failed face verification attempts (3/3). Locked for 5 minutes. Please see your lecturer for manual verification.",
+                    "error_code": "FACE_ATTEMPTS_LOCKED",
+                    "attempts_used": recent_failures,
+                    "attempts_remaining": 0,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Non-biometric alternative path only sends a manual verification request to lecturer (never marks present)
         if use_alternative:
             if not config.allow_non_biometric_alternative:
                 return Response(
@@ -536,8 +606,8 @@ class ScanQRAttendanceView(APIView):
                 recipient=session.lecturer,
                 title=f"Manual Verification Requested: {session.course.code}",
                 message=(
-                    f"{user.full_name} ({student_profile.index_number}) opted for the non-biometric "
-                    f"attendance alternative for {session.course.code} ({session.title}). Please verify in person."
+                    f"{user.full_name} ({student_profile.index_number}) requested manual verification "
+                    f"for {session.course.code} ({session.title}). Please verify in person."
                 ),
                 notification_type="SYSTEM",
                 related_course_code=session.course.code,
@@ -545,12 +615,12 @@ class ScanQRAttendanceView(APIView):
             return Response(
                 {
                     "pending_manual_verification": True,
-                    "message": "Non-biometric verification request sent to your lecturer. Please present your UCC ID card in class.",
+                    "message": "Manual verification request sent to your lecturer. Please see your lecturer in class.",
                 },
                 status=status.HTTP_202_ACCEPTED,
             )
 
-        # Require registered facial template unless student uses approved non-biometric alternative
+        # Require registered facial template (server-side 1:1 enforcement)
         if enrollment_status != "ENROLLED" or not bp or not bp.encrypted_template:
             FaceVerificationAttempt.objects.create(
                 student=user,
@@ -568,14 +638,14 @@ class ScanQRAttendanceView(APIView):
             )
             return Response(
                 {
-                    "error": "Facial registration required: Please complete 'Register My Face' in your Student Dashboard before scanning, or request the manual alternative.",
+                    "error": "Face ID enrollment required: Please complete 'Enroll Face ID' before marking attendance.",
                     "error_code": "FACE_NOT_REGISTERED",
                     "allow_non_biometric_alternative": config.allow_non_biometric_alternative,
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Student has an ENROLLED biometric template: perform 1:1 facial verification + liveness
+        # Perform mandatory 1:1 facial verification + liveness on server
         if True:
             if not isinstance(raw_frames, list) or len(raw_frames) == 0:
                 return Response(
@@ -693,9 +763,10 @@ class ScanQRAttendanceView(APIView):
                 )
                 return Response(
                     {
-                        "error": "Face verification unsuccessful. Your live face did not match your enrolled student template.",
+                        "error": "Face doesn't match your enrolled profile.",
                         "error_code": "FACE_MISMATCH",
                         "attempt_id": str(attempt.id),
+                        "attempts_remaining": max(0, 3 - (recent_failures + 1)),
                         "can_dispute": True,
                     },
                     status=status.HTTP_403_FORBIDDEN,
@@ -729,6 +800,7 @@ class ScanQRAttendanceView(APIView):
                     marked_by=user,
                     ip_address=client_ip,
                     device_info=device_info,
+                    device_id=device_id,
                     remarks=(
                         "Verified via Cryptographic QR + 1:1 Facial Verification"
                         if biometric_verified
@@ -796,6 +868,9 @@ class SessionRecordsListCreateView(APIView):
         session = get_object_or_404(
             AttendanceSession.objects.select_related("course"), pk=pk
         )
+        auth_err = _check_session_ownership(request.user, session)
+        if auth_err is not None:
+            return auth_err
         records = AttendanceRecord.objects.filter(session=session).select_related(
             "student__student_profile__programme", "marked_by"
         )
@@ -852,12 +927,38 @@ class SessionRecordsListCreateView(APIView):
                 }
             )
 
+        failed_attempts_qs = (
+            FaceVerificationAttempt.objects.filter(session=session)
+            .exclude(result="SUCCESS")
+            .select_related("student__student_profile")
+            .order_by("-created_at")
+        )
+        failed_map = {}
+        for att in failed_attempts_qs:
+            sid = str(att.student_id)
+            if sid not in failed_map:
+                s_idx = (
+                    att.student.student_profile.index_number
+                    if hasattr(att.student, "student_profile")
+                    else "N/A"
+                )
+                failed_map[sid] = {
+                    "student_id": sid,
+                    "student_name": att.student.full_name,
+                    "student_index_number": s_idx,
+                    "attempt_count": 0,
+                    "last_reason": att.get_result_display() if hasattr(att, "get_result_display") else att.result,
+                    "last_attempt_at": att.created_at.isoformat(),
+                }
+            failed_map[sid]["attempt_count"] += 1
+
         return Response(
             {
                 "session_id": str(session.id),
                 "course_code": session.course.code,
                 "records": records_data,
                 "roster": roster,
+                "failed_verifications": list(failed_map.values()),
             }
         )
 

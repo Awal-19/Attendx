@@ -13,10 +13,15 @@ import {
   Sun,
   UserCheck,
   RefreshCw,
+  ArrowRight,
+  ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { isInAppBrowser, getOrCreateDeviceId } from '../../utils/browserDetect';
 
 const extractQrToken = (rawValue) => {
   const val = (rawValue || '').trim();
@@ -57,6 +62,8 @@ const ScanAttendance = () => {
   const [faceProgress, setFaceProgress] = useState(0);
   const [verifyingFace, setVerifyingFace] = useState(false);
   const [lastAttemptId, setLastAttemptId] = useState(null);
+  const [inApp] = useState(() => isInAppBrowser());
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const scannerRef = useRef(null);
   const faceVideoRef = useRef(null);
@@ -152,15 +159,9 @@ const ScanAttendance = () => {
         await stopCamera();
       }
 
-      if (valRes.data.requires_face_verification) {
-        setFaceStep({
-          token: cleanToken,
-          ...valRes.data,
-        });
-        await startFaceCamera();
-      } else if (valRes.data.face_registration_required) {
+      if (valRes.data.face_registration_required) {
         setErrorMsg(
-          'Facial registration required: Please complete "Register My Face" before scanning QR attendance, or request the non-biometric manual alternative.'
+          'Face ID enrollment is required before marking attendance. Complete enrollment and you will return here automatically.'
         );
         setFaceStep({
           token: cleanToken,
@@ -168,14 +169,11 @@ const ScanAttendance = () => {
           ...valRes.data,
         });
       } else {
-        // Student opted out -> allow non-biometric alternative request
-        const res = await api.post('/attendance/scan/', {
+        setFaceStep({
           token: cleanToken,
-          use_alternative: true,
-          device_info: navigator.userAgent,
+          ...valRes.data,
         });
-        addToast(res.data.message, 'info', 'Manual Verification Requested');
-        setTokenInput('');
+        await startFaceCamera();
       }
     } catch (err) {
       const msg =
@@ -222,6 +220,7 @@ const ScanAttendance = () => {
         frames,
         challenge: faceStep.liveness_challenge || 'HEAD_TURN',
         device_info: navigator.userAgent,
+        device_id: getOrCreateDeviceId(),
       });
 
       setFaceProgress(100);
@@ -233,8 +232,13 @@ const ScanAttendance = () => {
       addToast(res.data.message, 'success', 'Identity & Attendance Verified!');
     } catch (err) {
       const data = err.response?.data || {};
+      const attemptsNote =
+        typeof data.attempts_remaining === 'number'
+          ? ` (${data.attempts_remaining} attempt${data.attempts_remaining === 1 ? '' : 's'} remaining)`
+          : '';
       const msg =
-        data.error || 'Facial verification failed. Please adjust lighting and try again.';
+        (data.error || 'Facial verification failed. Please adjust lighting and try again.') +
+        attemptsNote;
       setErrorMsg(msg);
       if (data.attempt_id) {
         setLastAttemptId(data.attempt_id);
@@ -303,12 +307,44 @@ const ScanAttendance = () => {
   const isBiometricEnrolled = user?.biometric_status?.enrollment_status === 'ENROLLED';
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-5">
+      {inApp && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <ExternalLink className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-extrabold">
+                Open this page in Safari/Chrome to verify your face
+              </p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                In-app browsers (WhatsApp, TikTok, Instagram, Facebook) often block camera access.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(window.location.href);
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 2500);
+              } catch {
+                // ignore
+              }
+            }}
+            className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedLink ? 'Link Copied!' : 'Copy link'}</span>
+          </button>
+        </div>
+      )}
+
       <div>
-        <h2 className="text-2xl font-extrabold text-[#061430]">
-          Classroom QR &amp; Facial Attendance Scanner
+        <h2 className="text-[22px] sm:text-2xl font-extrabold text-[#061430] leading-tight">
+          Scan Attendance QR
         </h2>
-        <p className="text-sm text-slate-500">
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
           Scan the lecturer’s rotating QR code and complete 1:1 facial verification
         </p>
       </div>
@@ -377,53 +413,61 @@ const ScanAttendance = () => {
       {/* Confirmation Card */}
       {scanResult && (
         <div
-          className="p-6 rounded-3xl text-white shadow-2xl space-y-4"
+          className="p-6 sm:p-8 rounded-3xl text-white shadow-2xl space-y-5"
           style={{
-            background: 'linear-gradient(135deg, #040d21 0%, #1d4ed8 65%, #991b1b 100%)',
+            background: 'linear-gradient(135deg, #040d21 0%, #065f46 55%, #047857 100%)',
             border: '1px solid rgba(255, 255, 255, 0.28)',
           }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/15 border border-white/30 flex items-center justify-center">
-              <CheckCircle2 className="w-7 h-7 text-white" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/25 border border-emerald-300/40 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-8 h-8 text-emerald-300" />
             </div>
             <div>
-              <span className="text-xs font-mono uppercase tracking-wider text-blue-200">
-                FACIAL VERIFICATION SUCCESSFUL
+              <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">
+                QR + 1:1 FACE VERIFICATION PASSED
               </span>
-              <h3 className="text-xl font-extrabold">
-                Attendance successfully recorded! Your identity has been verified.
+              <h3 className="text-[22px] sm:text-2xl font-extrabold">
+                You&apos;re marked present
               </h3>
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-[#040d21]/60 border border-white/15 text-xs">
             <div>
-              <p className="text-blue-200/75">Course</p>
+              <p className="text-emerald-200/80">Course</p>
               <p className="font-bold text-white mt-0.5">
                 {scanResult.course_code} — {scanResult.course_title}
               </p>
             </div>
             <div>
-              <p className="text-blue-200/75">Student &amp; Index</p>
+              <p className="text-emerald-200/80">Student &amp; Index</p>
               <p className="font-bold text-white mt-0.5">
                 {scanResult.student_name} ({scanResult.student_index_number})
               </p>
             </div>
             <div>
-              <p className="text-blue-200/75">Date &amp; Time</p>
+              <p className="text-emerald-200/80">Time</p>
               <p className="font-mono text-white mt-0.5">
                 {new Date(scanResult.timestamp).toLocaleDateString()} •{' '}
                 {new Date(scanResult.timestamp).toLocaleTimeString()}
               </p>
             </div>
             <div>
-              <p className="text-blue-200/75">Status</p>
-              <p className="font-bold text-blue-200 mt-0.5">
+              <p className="text-emerald-200/80">Status</p>
+              <p className="font-bold text-emerald-200 mt-0.5">
                 {scanResult.status} ({verificationMeta?.biometric_verified ? 'QR + Face Verified' : scanResult.verification_method})
               </p>
             </div>
           </div>
+
+          <Link
+            to="/student/dashboard"
+            className="w-full min-h-[48px] py-3 px-5 rounded-xl bg-white text-[#061430] hover:bg-emerald-50 font-extrabold text-sm inline-flex items-center justify-center gap-2 transition"
+          >
+            <span>Go to dashboard</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       )}
 
@@ -447,7 +491,24 @@ const ScanAttendance = () => {
       )}
 
       {/* Liquid Glass Step 5-8: "Verify Your Identity" Camera Frame */}
-      {faceStep ? (
+      {faceStep && faceStep.unregistered ? (
+        <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-4 text-center">
+          <h3 className="text-xl font-extrabold text-[#061430]">Face ID Enrollment Required</h3>
+          <p className="text-sm text-slate-600">
+            You must enroll your Face ID once before marking attendance. After enrolling, you will
+            return straight here to finish checking in.
+          </p>
+          <Link
+            to={`/student/face-enrollment?next=${encodeURIComponent(
+              `/student/scan?t=${encodeURIComponent(faceStep.token)}`
+            )}`}
+            className="w-full sm:w-auto min-h-[48px] px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm inline-flex items-center justify-center gap-2"
+          >
+            <span>Enroll Face ID Now</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      ) : faceStep ? (
         <div
           className="relative rounded-3xl p-6 sm:p-8 text-white shadow-2xl space-y-5 overflow-hidden"
           style={{

@@ -40,6 +40,7 @@ class AttendanceSession(models.Model):
     end_time = models.DateTimeField()
     duration_minutes = models.PositiveSmallIntegerField(default=30)
     qr_refresh_seconds = models.PositiveSmallIntegerField(default=60)
+    restrict_single_device = models.BooleanField(default=False)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="ACTIVE", db_index=True
     )
@@ -185,6 +186,7 @@ class AttendanceRecord(models.Model):
     )
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     device_info = models.CharField(max_length=255, blank=True, default="")
+    device_id = models.CharField(max_length=128, blank=True, default="", db_index=True)
     remarks = models.CharField(max_length=255, blank=True, default="")
     timestamp = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

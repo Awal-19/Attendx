@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Camera,
   CameraOff,
@@ -10,20 +11,37 @@ import {
   Sparkles,
   Sun,
   UserCheck,
+  ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { isInAppBrowser } from '../../utils/browserDetect';
+
+const POSE_PROMPTS = [
+  'Frame 1/3: Look straight at the camera',
+  'Frame 2/3: Turn your head slightly left',
+  'Frame 3/3: Turn your head slightly right',
+];
 
 const FaceEnrollmentPage = () => {
   const { user, refreshProfile } = useAuth();
   const { addToast } = useToast();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawNext = searchParams.get('next') || '';
+  const safeNext = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '';
 
+  const [inApp] = useState(() => isInAppBrowser());
+  const [copiedLink, setCopiedLink] = useState(false);
   const [statusData, setStatusData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [capturing, setCapturing] = useState(false);
+  const [posePrompt, setPosePrompt] = useState('');
   const [progress, setProgress] = useState(0);
   const [enrollResult, setEnrollResult] = useState(null);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -110,14 +128,15 @@ const FaceEnrollmentPage = () => {
     try {
       const frames = [];
       for (let i = 0; i < 3; i += 1) {
+        setPosePrompt(POSE_PROMPTS[i]);
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, i === 0 ? 350 : 650));
         const frame = captureFrameBase64();
         if (frame) frames.push(frame);
         setProgress(25 + (i + 1) * 20);
-        // Wait 350ms between captures to ensure natural multi-frame sampling
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => setTimeout(r, 350));
       }
 
+      setPosePrompt('Encrypting facial template...');
       setProgress(90);
       const res = await api.post('/biometrics/enroll/', { frames });
       setProgress(100);
@@ -125,6 +144,9 @@ const FaceEnrollmentPage = () => {
       addToast(res.data.message, 'success', 'Biometric Enrollment Complete');
       stopCamera();
       await Promise.all([loadStatus(), refreshProfile()]);
+      if (safeNext) {
+        setTimeout(() => navigate(safeNext, { replace: true }), 900);
+      }
     } catch (err) {
       const msg =
         err.response?.data?.error ||
@@ -272,10 +294,14 @@ const FaceEnrollmentPage = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {!cameraActive ? (
+              {isEnrolled ? (
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                  Locked (1 Enrollment / Account)
+                </span>
+              ) : !cameraActive ? (
                 <button
                   onClick={startCamera}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-bold cursor-pointer"
+                  className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-xl text-white text-xs font-bold cursor-pointer"
                   style={{
                     background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 60%, #dc2626 100%)',
                   }}
@@ -343,7 +369,7 @@ const FaceEnrollmentPage = () => {
               {capturing && (
                 <div className="max-w-md mx-auto space-y-1.5">
                   <div className="flex justify-between text-xs font-bold text-[#061430]">
-                    <span>Analyzing face quality &amp; encrypting template...</span>
+                    <span>{posePrompt || 'Analyzing face quality & encrypting template...'}</span>
                     <span>{progress}%</span>
                   </div>
                   <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">

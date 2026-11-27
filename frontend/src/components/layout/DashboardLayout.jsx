@@ -230,7 +230,7 @@ const DashboardLayout = ({ children }) => {
 
       {/* Sidebar */}
       <aside
-        className={`ucc-sidebar-shell fixed inset-y-0 left-0 z-50 w-72 text-white flex flex-col relative overflow-hidden transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`ucc-sidebar-shell fixed inset-y-0 left-0 z-50 w-72 text-white flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -349,6 +349,7 @@ const DashboardLayout = ({ children }) => {
               <NavLink
                 key={item.path}
                 to={item.path}
+                onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold ${
                     isActive
@@ -428,22 +429,24 @@ const DashboardLayout = ({ children }) => {
             WebkitBackdropFilter: 'blur(20px)',
           }}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100"
+              aria-label="Open menu"
+              className="lg:hidden min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 cursor-pointer"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
               <img
                 src="/images/ucc-official-crest.png"
                 alt="UCC Crest"
-                className="w-7 h-8 object-contain hidden sm:block"
+                className="w-6 h-7 sm:w-7 sm:h-8 object-contain shrink-0"
               />
-              <div>
-                <h1 className="text-sm sm:text-base font-extrabold text-[#061430]">
-                  University of Cape Coast (UCC)
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-extrabold text-[#061430] truncate">
+                  <span className="sm:hidden">AttendX</span>
+                  <span className="hidden sm:inline">University of Cape Coast (UCC)</span>
                 </h1>
                 <p className="text-xs text-slate-500 hidden sm:block">
                   AttendX Cryptographic QR Classroom Verification Platform
@@ -495,7 +498,7 @@ const DashboardLayout = ({ children }) => {
               </button>
 
               {bellOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50">
+                <div className="fixed sm:absolute right-4 sm:right-0 left-4 sm:left-auto top-16 sm:top-auto sm:mt-2 w-auto sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50">
                   <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-[#061430] text-white">
                     <span className="text-xs font-extrabold uppercase tracking-wider">
                       Notifications ({unreadCount} unread)
@@ -554,7 +557,44 @@ const DashboardLayout = ({ children }) => {
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="flex-1 px-4 py-5 sm:p-8 pb-24 md:pb-8 max-w-7xl w-full mx-auto min-w-0">
+          {children}
+        </main>
+
+        {/* Mobile Bottom Navigation Bar (< 768px) for Student Portal */}
+        {role === 'STUDENT' && (
+          <nav
+            aria-label="Mobile Navigation"
+            className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          >
+            <div className="grid grid-cols-5 h-16">
+              {[
+                { label: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
+                { label: 'Scan', path: '/student/scan', icon: QrCode },
+                { label: 'Courses', path: '/student/courses', icon: BookOpen },
+                { label: 'History', path: '/student/history', icon: ClipboardList },
+                { label: 'Profile', path: '/student/profile', icon: User },
+              ].map((navItem) => {
+                const Icon = navItem.icon;
+                return (
+                  <NavLink
+                    key={navItem.path}
+                    to={navItem.path}
+                    className={({ isActive }) =>
+                      `min-h-[44px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition ${
+                        isActive ? 'text-blue-700' : 'text-slate-500 hover:text-[#061430]'
+                      }`
+                    }
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span>{navItem.label}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          </nav>
+        )}
       </div>
     </div>
   );

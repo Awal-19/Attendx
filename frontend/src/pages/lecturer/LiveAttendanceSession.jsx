@@ -12,6 +12,11 @@ import {
   ShieldAlert,
   Clock,
   Wifi,
+  Search,
+  Download,
+  Volume2,
+  VolumeX,
+  AlertTriangle,
 } from 'lucide-react';
 import api, { getWebSocketUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
@@ -34,6 +39,12 @@ const LiveAttendanceSession = () => {
   const [qrToken, setQrToken] = useState(null);
   const [roster, setRoster] = useState([]);
   const [records, setRecords] = useState([]);
+  const [failedVerifications, setFailedVerifications] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [rosterFilter, setRosterFilter] = useState('ALL'); // ALL | PRESENT | ABSENT | FAILED
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [toastEnabled, setToastEnabled] = useState(true);
+  const [restrictSingleDevice, setRestrictSingleDevice] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [projectorFullscreen, setProjectorFullscreen] = useState(false);
   const [tokenCountdown, setTokenCountdown] = useState(60);
@@ -55,6 +66,7 @@ const LiveAttendanceSession = () => {
       }
       setRoster(recRes.data.roster || []);
       setRecords(recRes.data.records || []);
+      setFailedVerifications(recRes.data.failed_verifications || []);
     } catch {
       // ignore
     }
@@ -84,6 +96,35 @@ const LiveAttendanceSession = () => {
     init();
   }, [initialSessionId, fetchSessionRecords]);
 
+  const playCheckInChime = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.18);
+    } catch {
+      // ignore audio context restrictions
+    }
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    if (!activeSession?.id || activeSession.status !== 'ACTIVE' || wsConnected) return;
+    const pollTimer = setInterval(() => {
+      fetchSessionRecords(activeSession.id);
+    }, 3000);
+    return () => clearInterval(pollTimer);
+  }, [activeSession?.id, activeSession?.status, wsConnected, fetchSessionRecords]);
+
   useEffect(() => {
     if (!activeSession?.id) return;
 
@@ -100,11 +141,14 @@ const LiveAttendanceSession = () => {
         const data = JSON.parse(event.data);
         if (data.type === 'student_registered' || data.type === 'record_updated') {
           if (data.record) {
-            addToast(
-              `${data.record.student_name} (${data.record.student_index_number}) marked ${data.record.status}!`,
-              'success',
-              'Real-Time Check-In'
-            );
+            playCheckInChime();
+            if (toastEnabled) {
+              addToast(
+                `${data.record.student_name} (${data.record.student_index_number}) marked ${data.record.status}!`,
+                'success',
+                'Real-Time Check-In'
+              );
+            }
           }
           fetchSessionRecords(activeSession.id);
         } else if (data.type === 'qr_refreshed' && data.qr_token) {
@@ -125,7 +169,7 @@ const LiveAttendanceSession = () => {
     return () => {
       socket.close();
     };
-  }, [activeSession?.id, fetchSessionRecords, addToast]);
+  }, [activeSession?.id, fetchSessionRecords, addToast, playCheckInChime, toastEnabled]);
 
   const handleRotateQR = useCallback(async () => {
     if (!activeSession || activeSession.status !== 'ACTIVE') return;
@@ -168,6 +212,7 @@ const LiveAttendanceSession = () => {
         topic: sessionTopic,
         duration_minutes: durationMinutes,
         qr_refresh_seconds: qrRefreshSeconds,
+        restrict_single_device: restrictSingleDevice,
       };
       if (initialScheduleId) {
         payload.schedule = initialScheduleId;
@@ -200,17 +245,62 @@ const LiveAttendanceSession = () => {
 
   const handleManualMark = async (studentId, newStatus) => {
     if (!activeSession) return;
+    if (!manualReason.trim()) {
+      addToast('Please enter an audit reason before manual override.', 'error');
+      return;
+    }
     try {
       const res = await api.post(`/attendance/sessions/${activeSession.id}/records/`, {
         student_id: studentId,
         status: newStatus,
-        reason: manualReason || 'Manual lecturer verification',
+        reason: manualReason.trim(),
       });
       addToast(res.data.message, 'success', 'Audit Log Recorded');
       fetchSessionRecords(activeSession.id);
     } catch (err) {
       addToast(err.response?.data?.error || 'Could not update attendance.', 'error');
     }
+  };
+
+  const exportSessionCsv = () => {
+    if (!activeSession) return;
+    const headers = [
+      'Index Number',
+      'Full Name',
+      'Programme',
+      'Status',
+      'Verification',
+      'Time',
+      'Remarks',
+    ];
+    const rows = roster.map((st) => {
+      const verif =
+        st.verification_method === 'MANUAL'
+          ? 'Manual'
+          : st.verification_method === 'QR_FACE_VERIFIED' || st.biometric_verified
+          ? 'QR + Face Verified'
+          : st.verification_method || 'Absent';
+      const timeStr = st.timestamp ? new Date(st.timestamp).toLocaleTimeString() : '—';
+      return [
+        st.student_index_number,
+        st.student_name,
+        st.student_programme || '',
+        st.status,
+        verif,
+        timeStr,
+        st.remarks || '',
+      ]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeSession.course_code || 'attendance'}-session.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const copyTokenToClipboard = () => {
@@ -443,26 +533,110 @@ const LiveAttendanceSession = () => {
             </div>
 
             {/* Real-Time Student Verification Feed & Manual Override Roster */}
-            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-5">
+            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 sm:p-6 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
                 <div>
                   <h3 className="text-base font-extrabold text-[#061430]">
-                    Real-Time Verified Students &amp; Manual Override Roster
+                    Live Attendance Roster &amp; Manual Override
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Updates automatically via WebSockets as students scan the projected QR code
+                    {wsConnected
+                      ? 'Live WebSocket stream active (1:1 Face + QR)'
+                      : 'Polling every 3s (1:1 Face + QR)'}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-2xl font-extrabold text-[#061430]">
-                      {activeSession.present_count} / {activeSession.enrolled_count}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="text-left sm:text-right">
+                    <p className="text-xl sm:text-2xl font-extrabold text-[#061430]">
+                      {activeSession.present_count} present of {activeSession.enrolled_count} enrolled
                     </p>
                     <p className="text-[11px] font-bold text-blue-700">
                       {activeSession.attendance_rate}% Turnout
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* Search, Filter Tabs, Sound/Toast & CSV Export */}
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by index number or name..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSoundEnabled((v) => !v)}
+                      className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer ${
+                        soundEnabled
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                      <span>{soundEnabled ? 'Sound On' : 'Muted'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setToastEnabled((v) => !v)}
+                      className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer ${
+                        toastEnabled
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {toastEnabled ? 'Alerts On' : 'Alerts Off'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportSessionCsv}
+                      className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#061430] hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { key: 'ALL', label: `All (${roster.length})` },
+                    {
+                      key: 'PRESENT',
+                      label: `Present (${roster.filter((r) => r.status === 'PRESENT' || r.status === 'LATE' || r.status === 'EXCUSED').length})`,
+                    },
+                    {
+                      key: 'ABSENT',
+                      label: `Absent (${roster.filter((r) => r.status === 'ABSENT').length})`,
+                    },
+                    {
+                      key: 'FAILED',
+                      label: `Verification failed (${failedVerifications.length})`,
+                    },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setRosterFilter(tab.key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${
+                        rosterFilter === tab.key
+                          ? tab.key === 'FAILED'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-blue-700 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -480,102 +654,168 @@ const LiveAttendanceSession = () => {
                 />
               </div>
 
-              {/* Roster List */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      <th className="py-3 px-4">Index Number</th>
-                      <th className="py-3 px-4">Student, Dept &amp; Programme</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Verification &amp; Time</th>
-                      <th className="py-3 px-4 text-right">Manual Override (Audit Logged)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200/70 text-xs sm:text-sm">
-                    {roster.map((st) => {
-                      const isPresent = st.status === 'PRESENT' || st.status === 'LATE';
-                      const badgeLabel =
-                        st.verification_badge ||
-                        (st.verification_method === 'QR_FACE_VERIFIED' || st.biometric_verified
-                          ? 'QR + Face Verified'
-                          : st.verification_method === 'MANUAL'
-                            ? 'Manually Verified'
-                            : st.verification_method
-                              ? 'QR Verified'
-                              : 'Pending Verification');
-                      return (
-                        <tr key={st.student_id} className="hover:bg-blue-50/40 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-blue-700">
-                            {st.student_index_number}
-                          </td>
-                          <td className="py-3 px-4">
-                            <p className="font-bold text-[#061430]">{st.student_name}</p>
-                            <p className="text-[11px] text-slate-600">{st.student_programme}</p>
-                            {st.student_department && (
-                              <p className="text-[10px] text-slate-400">{st.student_department}</p>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${st.status === 'PRESENT'
-                                  ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                                  : st.status === 'LATE'
-                                    ? 'bg-red-50 text-red-700 border border-red-200'
-                                    : st.status === 'EXCUSED'
+              {/* Verification Failed List or Roster Table */}
+              {rosterFilter === 'FAILED' ? (
+                <div className="space-y-2.5">
+                  {failedVerifications.length === 0 ? (
+                    <p className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl">
+                      No failed face verification attempts recorded in this session.
+                    </p>
+                  ) : (
+                    failedVerifications
+                      .filter((f) => {
+                        const q = searchQuery.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          f.student_name.toLowerCase().includes(q) ||
+                          f.student_index_number.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((f) => (
+                        <div
+                          key={f.student_id}
+                          className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-bold text-[#061430]">
+                                {f.student_name}{' '}
+                                <span className="font-mono text-xs text-blue-700">
+                                  ({f.student_index_number})
+                                </span>
+                              </p>
+                              <p className="text-xs text-red-700">
+                                {f.attempt_count} failed attempt{f.attempt_count === 1 ? '' : 's'} •{' '}
+                                {f.last_reason}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleManualMark(f.student_id, 'PRESENT')}
+                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer self-start sm:self-center"
+                          >
+                            Manual Present
+                          </button>
+                        </div>
+                      ))
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        <th className="py-3 px-4">Index Number</th>
+                        <th className="py-3 px-4">Student, Dept &amp; Programme</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Verification &amp; Time</th>
+                        <th className="py-3 px-4 text-right">Manual Override (Audit Logged)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/70 text-xs sm:text-sm">
+                      {roster
+                        .filter((st) => {
+                          if (rosterFilter === 'PRESENT') {
+                            if (st.status !== 'PRESENT' && st.status !== 'LATE' && st.status !== 'EXCUSED') {
+                              return false;
+                            }
+                          } else if (rosterFilter === 'ABSENT') {
+                            if (st.status !== 'ABSENT') return false;
+                          }
+                          const q = searchQuery.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            (st.student_name || '').toLowerCase().includes(q) ||
+                            (st.student_index_number || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((st) => {
+                          const isPresent = st.status === 'PRESENT' || st.status === 'LATE';
+                          const badgeLabel =
+                            st.verification_method === 'MANUAL'
+                              ? 'Manual'
+                              : st.verification_badge ||
+                                (st.verification_method === 'QR_FACE_VERIFIED' || st.biometric_verified
+                                  ? 'QR + Face Verified'
+                                  : st.verification_method
+                                  ? 'QR Verified'
+                                  : 'Pending Verification');
+                          return (
+                            <tr key={st.student_id} className="hover:bg-blue-50/40 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-blue-700">
+                                {st.student_index_number}
+                              </td>
+                              <td className="py-3 px-4">
+                                <p className="font-bold text-[#061430]">{st.student_name}</p>
+                                <p className="text-[11px] text-slate-600">{st.student_programme}</p>
+                                {st.student_department && (
+                                  <p className="text-[10px] text-slate-400">{st.student_department}</p>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                    st.status === 'PRESENT'
+                                      ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                      : st.status === 'LATE'
+                                      ? 'bg-red-50 text-red-700 border border-red-200'
+                                      : st.status === 'EXCUSED'
                                       ? 'bg-slate-100 text-slate-700 border border-slate-200'
                                       : 'bg-red-100 text-red-800'
-                                }`}
-                            >
-                              {isPresent && <CheckCircle2 className="w-3 h-3" />}
-                              {st.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-slate-500">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold mb-1 ${badgeLabel.startsWith('Verified') || badgeLabel === 'QR + Face Verified'
-                                  ? 'bg-blue-700 text-white'
-                                  : badgeLabel === 'Verification failed'
-                                    ? 'bg-red-600 text-white'
-                                    : badgeLabel === 'Manually Verified'
+                                  }`}
+                                >
+                                  {isPresent && <CheckCircle2 className="w-3 h-3" />}
+                                  {st.status}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-xs text-slate-500">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold mb-1 ${
+                                    badgeLabel.startsWith('Verified') || badgeLabel === 'QR + Face Verified'
+                                      ? 'bg-blue-700 text-white'
+                                      : badgeLabel === 'Verification failed'
+                                      ? 'bg-red-600 text-white'
+                                      : badgeLabel === 'Manual'
                                       ? 'bg-slate-800 text-white'
                                       : 'bg-amber-50 text-amber-800 border border-amber-200'
-                                }`}
-                            >
-                              {badgeLabel}
-                            </span>
-                            {st.timestamp && (
-                              <p className="font-mono text-[11px] text-slate-500">
-                                {new Date(st.timestamp).toLocaleTimeString()}
-                              </p>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-right space-x-1.5">
-                            <button
-                              onClick={() => handleManualMark(st.student_id, 'PRESENT')}
-                              className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
-                            >
-                              Present
-                            </button>
-                            <button
-                              onClick={() => handleManualMark(st.student_id, 'LATE')}
-                              className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold transition cursor-pointer"
-                            >
-                              Late
-                            </button>
-                            <button
-                              onClick={() => handleManualMark(st.student_id, 'EXCUSED')}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
-                            >
-                              Excused
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                  }`}
+                                >
+                                  {badgeLabel}
+                                </span>
+                                {st.timestamp && (
+                                  <p className="font-mono text-[11px] text-slate-500">
+                                    {new Date(st.timestamp).toLocaleTimeString()}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right space-x-1">
+                                <button
+                                  onClick={() => handleManualMark(st.student_id, 'PRESENT')}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
+                                >
+                                  Present
+                                </button>
+                                <button
+                                  onClick={() => handleManualMark(st.student_id, 'ABSENT')}
+                                  className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition cursor-pointer"
+                                >
+                                  Absent
+                                </button>
+                                <button
+                                  onClick={() => handleManualMark(st.student_id, 'LATE')}
+                                  className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold transition cursor-pointer"
+                                >
+                                  Late
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
