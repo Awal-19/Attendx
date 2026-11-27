@@ -142,6 +142,8 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 WHITENOISE_USE_FINDERS = True
+if (BASE_DIR / "frontend_dist").exists():
+    WHITENOISE_ROOT = BASE_DIR / "frontend_dist"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
