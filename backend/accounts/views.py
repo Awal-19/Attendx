@@ -9,10 +9,11 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.contrib.auth.hashers import check_password
 from .models import SecurityAuditLog, User, UserSession
 from .serializers import RegisterSerializer, LoginSerializer, UserProfileSerializer
-from .permissions import IsSuperAdmin
+from .permissions import IsSuperAdmin, IsLecturerOrAdmin
 from .security_service import (
     record_failed_login,
     record_security_audit,
@@ -191,7 +192,7 @@ class RoleLoginView(APIView):
             status=status.HTTP_200_OK,
         )
         secure_cookie = not settings.DEBUG
-        samesite_policy = "None" if not settings.DEBUG else "Lax"
+        samesite_policy = "Lax"
         resp.set_cookie(
             f"attendx_access_{self.portal_key}",
             tokens["access"],
@@ -652,3 +653,86 @@ class AdminSecurityAuditLogView(APIView):
             for log in qs[:200]
         ]
         return Response(data)
+
+
+class CookieTokenRefreshView(APIView):
+    """
+    Refreshes JWT access/refresh tokens from either request body or httpOnly cookies
+    and sets rotated httpOnly SameSite=Lax cookies (90-day persistence for students).
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from django.conf import settings
+
+        portal = (request.data.get("portal") or request.query_params.get("portal") or "student").lower()
+        raw_refresh = request.data.get("refresh") or request.COOKIES.get(f"attendx_refresh_{portal}")
+        if not raw_refresh:
+            for cname in (
+                "attendx_refresh_student",
+                "attendx_refresh_lecturer",
+                "attendx_refresh_admin",
+                "attendx_refresh_default",
+            ):
+                if request.COOKIES.get(cname):
+                    raw_refresh = request.COOKIES.get(cname)
+                    portal = cname.replace("attendx_refresh_", "")
+                    break
+
+        if not raw_refresh:
+            return Response({"detail": "Refresh token missing."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        serializer = TokenRefreshSerializer(data={"refresh": raw_refresh})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception:
+            return Response({"detail": "Invalid or expired refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        data = serializer.validated_data
+        resp = Response(data, status=status.HTTP_200_OK)
+        secure_cookie = not settings.DEBUG
+        access_max_age = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+        refresh_max_age = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        if data.get("access"):
+            resp.set_cookie(
+                f"attendx_access_{portal}",
+                data["access"],
+                max_age=access_max_age,
+                httponly=True,
+                secure=secure_cookie,
+                samesite="Lax",
+                path="/",
+            )
+        if data.get("refresh"):
+            resp.set_cookie(
+                f"attendx_refresh_{portal}",
+                data["refresh"],
+                max_age=refresh_max_age,
+                httponly=True,
+                secure=secure_cookie,
+                samesite="Lax",
+                path="/",
+            )
+        return resp
+
+
+class RevokeStudentSessionsView(APIView):
+    """
+    Allows lecturers or administrators to revoke all active device sessions for a student.
+    """
+
+    permission_classes = [IsLecturerOrAdmin]
+
+    def post(self, request, student_id):
+        target_user = get_object_or_404(User, id=student_id, role="STUDENT")
+        revoke_all_user_sessions(target_user)
+        record_security_audit(
+            request.user,
+            "SESSION_REVOKED",
+            f"Revoked all device sessions for student {target_user.email}.",
+            affected_model="User",
+            affected_id=target_user.id,
+            request=request,
+        )
+        return Response({"message": f"All device sessions revoked for {target_user.full_name}."})

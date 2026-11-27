@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Lock, Save } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Lock, Save, LogOut } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
 const ProfileSettings = () => {
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshProfile, logout } = useAuth();
+  const navigate = useNavigate();
   const { addToast } = useToast();
 
   const [fullName, setFullName] = useState(user?.full_name || '');
@@ -217,6 +219,29 @@ const ProfileSettings = () => {
             Change Password
           </button>
         </form>
+      </div>
+
+      {/* Device Session */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-base font-extrabold text-[#061430]">Device Session</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Your device stays signed in for 90 days unless you sign out here or an administrator
+            revokes access.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            const redirectPath = await logout();
+            addToast('Signed out of this device.', 'info');
+            navigate(redirectPath || '/login');
+          }}
+          className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm transition cursor-pointer shrink-0"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign out of this device</span>
+        </button>
       </div>
     </div>
   );

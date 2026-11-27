@@ -21,12 +21,6 @@ export const AuthProvider = ({ children }) => {
 
   const refreshProfile = useCallback(async () => {
     const scope = getPortalScope();
-    const token = getScopedItem('attendx_access_token', scope);
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return null;
-    }
     try {
       const res = await api.get('/auth/profile/');
       setUser(res.data);

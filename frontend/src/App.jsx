@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import DashboardLayout from './components/layout/DashboardLayout';
 
 // Public Pages
@@ -62,9 +63,10 @@ const withLayout = (Component, allowedRoles) => (
 
 const App = () => {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <BrowserRouter>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
@@ -126,9 +128,10 @@ const App = () => {
             {/* Catch-all 404 */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </ToastProvider>
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 };
 

@@ -45,7 +45,11 @@ class QRTokenSerializer(serializers.ModelSerializer):
 
     def get_qr_url(self, obj):
         from django.conf import settings
-        base = getattr(settings, "APP_BASE_URL", "https://attendx-ucc-portal.netlify.app").rstrip("/")
+        base = getattr(
+            settings,
+            "FRONTEND_URL",
+            getattr(settings, "APP_BASE_URL", "https://attendx-backend-production-bb6f8a0e.up.railway.app"),
+        ).rstrip("/")
         return f"{base}/a/{obj.token}"
 
     def get_qr_image_base64(self, obj):

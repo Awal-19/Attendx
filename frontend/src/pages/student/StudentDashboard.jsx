@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   QrCode,
   BookOpen,
@@ -16,8 +16,20 @@ import { useAuth } from '../../context/AuthContext';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const pendingScanToken = (searchParams.get('scan') || '').trim();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (pendingScanToken) {
+      const t = setTimeout(() => {
+        navigate(`/student/scan?t=${encodeURIComponent(pendingScanToken)}`, { replace: true });
+      }, 350);
+      return () => clearTimeout(t);
+    }
+  }, [pendingScanToken, navigate]);
 
   useEffect(() => {
     api

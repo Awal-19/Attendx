@@ -416,7 +416,7 @@ SIMPLE_JWT = {
         minutes=int(os.getenv("ACCESS_TOKEN_LIFETIME_MINUTES", "120"))
     ),
     "REFRESH_TOKEN_LIFETIME": timedelta(
-        days=int(os.getenv("REFRESH_TOKEN_LIFETIME_DAYS", "7"))
+        days=int(os.getenv("REFRESH_TOKEN_LIFETIME_DAYS", "90"))
     ),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -430,7 +430,11 @@ ADMIN_SESSION_LIFETIME_MINUTES = int(os.getenv("ADMIN_SESSION_LIFETIME_MINUTES",
 LECTURER_SESSION_LIFETIME_MINUTES = int(os.getenv("LECTURER_SESSION_LIFETIME_MINUTES", "120"))
 
 # QR Security Settings
-APP_BASE_URL = os.getenv("APP_BASE_URL", "https://attendx-ucc-portal.netlify.app").rstrip("/")
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL",
+    os.getenv("APP_BASE_URL", "https://attendx-backend-production-bb6f8a0e.up.railway.app"),
+).rstrip("/")
+APP_BASE_URL = FRONTEND_URL
 QR_TOKEN_DEFAULT_EXPIRY_SECONDS = int(
     os.getenv("QR_TOKEN_DEFAULT_EXPIRY_SECONDS", "60")
 )

@@ -67,13 +67,13 @@ const QrScanLandingPage = () => {
       try {
         const valRes = await api.post('/attendance/scan/validate-qr/', { token });
         if (valRes.data.face_registration_required) {
-          const nextScan = `/student/scan?t=${encodeURIComponent(token)}`;
-          navigate(`/student/face-enrollment?next=${encodeURIComponent(nextScan)}`, {
+          const nextDash = `/student/dashboard?scan=${encodeURIComponent(token)}`;
+          navigate(`/student/face-enrollment?next=${encodeURIComponent(nextDash)}`, {
             replace: true,
           });
           return;
         }
-        navigate(`/student/scan?t=${encodeURIComponent(token)}`, { replace: true });
+        navigate(`/student/dashboard?scan=${encodeURIComponent(token)}`, { replace: true });
       } catch (err) {
         const data = err.response?.data || {};
         if (data.already_marked) {

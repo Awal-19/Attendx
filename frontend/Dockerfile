@@ -17,3 +17,4 @@ RUN npm run build && npm install -g serve
 
 EXPOSE 4173
 CMD ["sh", "-c", "serve -s dist -l ${PORT:-4173}"]
+

@@ -61,20 +61,24 @@ api.interceptors.response.use(
     ) {
       originalRequest._retry = true;
       const refreshToken = getScopedItem('attendx_refresh_token', scope);
-      if (refreshToken) {
-        try {
-          const res = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, {
-            refresh: refreshToken,
-          });
-          const newAccess = res.data.access;
-          localStorage.setItem(`attendx_access_token_${scope}`, newAccess);
-          if (res.data.refresh) {
-            localStorage.setItem(`attendx_refresh_token_${scope}`, res.data.refresh);
-          }
-          originalRequest.headers.Authorization = `Bearer ${newAccess}`;
-          return api(originalRequest);
-        } catch (refreshError) {
-          clearScopedAuth(scope);
+      try {
+        const res = await axios.post(
+          `${API_BASE_URL}/auth/token/refresh/`,
+          refreshToken ? { refresh: refreshToken, portal: scope } : { portal: scope },
+          { withCredentials: true }
+        );
+        const newAccess = res.data.access;
+        localStorage.setItem(`attendx_access_token_${scope}`, newAccess);
+        if (res.data.refresh) {
+          localStorage.setItem(`attendx_refresh_token_${scope}`, res.data.refresh);
+        }
+        originalRequest.headers.Authorization = `Bearer ${newAccess}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        clearScopedAuth(scope);
+        const path = window.location.pathname || '';
+        const isQrPath = path.startsWith('/a/') || path.startsWith('/scan');
+        if (!isQrPath && !path.startsWith('/login')) {
           window.location.href =
             scope === 'lecturer' ? '/lecturer' : scope === 'admin' ? '/admin' : '/login';
         }
@@ -88,7 +92,7 @@ export const getWebSocketUrl = (sessionId) => {
   const token = getScopedItem('attendx_access_token') || '';
   const wsBase =
     import.meta.env.VITE_WS_BASE_URL ||
-    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:8000`;
+    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
   return `${wsBase}/ws/attendance/session/${sessionId}/?token=${encodeURIComponent(token)}`;
 };
 
@@ -96,7 +100,7 @@ export const getNotificationWebSocketUrl = () => {
   const token = getScopedItem('attendx_access_token') || '';
   const wsBase =
     import.meta.env.VITE_WS_BASE_URL ||
-    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:8000`;
+    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
   return `${wsBase}/ws/notifications/?token=${encodeURIComponent(token)}`;
 };
 
