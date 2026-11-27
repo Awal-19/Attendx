@@ -4,7 +4,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, errorMessage: '' };
+    this.state = { hasError: false, errorMessage: '', showDetails: false };
   }
 
   static getDerivedStateFromError(error) {
@@ -29,7 +29,20 @@ class ErrorBoundary extends React.Component {
             <h1 className="text-xl font-extrabold">
               This attendance link couldn&apos;t be opened. Try scanning again
             </h1>
-            <p className="text-xs text-blue-100/80 break-words">{this.state.errorMessage}</p>
+            {(import.meta.env.DEV || this.state.showDetails) && (
+              <p className="text-xs text-blue-100/80 break-words bg-black/30 p-3 rounded-xl">
+                {this.state.errorMessage}
+              </p>
+            )}
+            {!import.meta.env.DEV && (
+              <button
+                type="button"
+                onClick={() => this.setState((prev) => ({ showDetails: !prev.showDetails }))}
+                className="text-xs text-blue-200/80 underline cursor-pointer"
+              >
+                {this.state.showDetails ? 'Hide Details' : 'Details'}
+              </button>
+            )}
             <div className="flex flex-col gap-2.5 pt-2">
               <button
                 type="button"

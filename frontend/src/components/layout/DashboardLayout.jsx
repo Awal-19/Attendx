@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Calendar,
   ShieldCheck,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
