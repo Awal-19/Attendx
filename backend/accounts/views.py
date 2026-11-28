@@ -363,6 +363,9 @@ class ChangePasswordView(APIView):
         request.user.set_password(new_password)
         request.user.save()
         revoke_all_user_sessions(request.user, actor=request.user, request=request)
+        if request.user.email and not request.user.email.endswith("@pending.ucc.local"):
+            from .messaging_service import send_password_changed_email
+            send_password_changed_email(request.user.email, request.user.full_name)
         record_security_audit(
             action="PASSWORD_CHANGED",
             description="User changed account password.",

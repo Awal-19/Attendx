@@ -13,6 +13,7 @@ import {
   Clock,
   ShieldAlert,
   FileSpreadsheet,
+  KeyRound,
 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
@@ -418,6 +419,31 @@ const ManageStudents = () => {
                         </span>
                       </td>
                       <td className="py-3.5 px-5 text-right space-x-1.5">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await api.post(`/auth/users/${st.id}/admin-reset-link/`);
+                              const url = res.data?.reset_url;
+                              if (url && navigator.clipboard) {
+                                await navigator.clipboard.writeText(url).catch(() => {});
+                              }
+                              addToast(
+                                `24h one-time reset link copied for ${st.full_name}`,
+                                'success',
+                                'Reset Link Generated'
+                              );
+                            } catch (err) {
+                              addToast(
+                                err.response?.data?.error || 'Could not generate reset link.',
+                                'error'
+                              );
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-50 cursor-pointer"
+                          title="Reset Student Password (24h One-Time Link)"
+                        >
+                          <KeyRound className="w-4 h-4 inline" />
+                        </button>
                         <button
                           onClick={() => openEditModal(st)}
                           className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 cursor-pointer"

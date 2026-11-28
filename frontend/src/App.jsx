@@ -14,6 +14,8 @@ import AdminLoginPage from './pages/public/AdminLoginPage';
 import StudentRegisterPage from './pages/public/StudentRegisterPage';
 import LecturerRegisterPage from './pages/public/LecturerRegisterPage';
 import ForgotPasswordPage from './pages/public/ForgotPasswordPage';
+import ResetPasswordPage from './pages/public/ResetPasswordPage';
+import VerifyEmailChangePage from './pages/public/VerifyEmailChangePage';
 import NotFoundPage from './pages/public/NotFoundPage';
 import QrScanLandingPage from './pages/student/QrScanLandingPage';
 
@@ -85,6 +87,8 @@ const App = () => {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/lecturer/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/verify-email-change" element={<VerifyEmailChangePage />} />
             <Route path="/a/:token" element={<QrScanLandingPage />} />
             <Route path="/scan" element={<QrScanLandingPage />} />
 

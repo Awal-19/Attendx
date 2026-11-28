@@ -189,3 +189,60 @@ class RegistrationOTP(models.Model):
     def __str__(self):
         return f"OTP({self.index_number}, used={self.is_used}, attempts={self.attempts})"
 
+
+class PasswordResetToken(models.Model):
+    """Single-use expiring password reset token (stores SHA-256 hash only)."""
+
+    CHANNEL_CHOICES = (
+        ("EMAIL", "Email Link"),
+        ("SMS", "SMS OTP"),
+        ("ADMIN", "Admin Assisted Link"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_tokens",
+    )
+    token_hash = models.CharField(max_length=128, unique=True, db_index=True)
+    channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default="EMAIL")
+    is_admin_assisted = models.BooleanField(default=False)
+    issued_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="issued_password_resets",
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+    expires_at = models.DateTimeField(db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "used_at", "expires_at"]),
+        ]
+
+
+class EmailChangeToken(models.Model):
+    """Single-use expiring confirmation token sent to a user's NEW email address."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="email_change_tokens",
+    )
+    new_email = models.EmailField()
+    token_hash = models.CharField(max_length=128, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+

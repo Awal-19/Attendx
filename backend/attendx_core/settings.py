@@ -354,6 +354,7 @@ REST_FRAMEWORK = {
         "biometric_verify": "60/minute",
         "register": "15/minute",
         "otp_verify": "20/minute",
+        "password_reset": "5/hour",
     },
 }
 

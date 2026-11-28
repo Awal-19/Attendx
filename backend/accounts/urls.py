@@ -16,6 +16,16 @@ from .views import (
     AdminSecurityAuditLogView,
 )
 from .registration_otp import RegisterVerifyOTPView, RegisterResendOTPView
+from .password_reset_views import (
+    ForgotPasswordLinkRequestView,
+    ResetPasswordVerifyView,
+    ResetPasswordConfirmView,
+    SmsPasswordResetRequestView,
+    SmsPasswordResetConfirmView,
+    AdminAssistedStudentResetView,
+    ProfileEmailChangeRequestView,
+    ProfileEmailChangeConfirmView,
+)
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="auth-register"),
@@ -29,7 +39,14 @@ urlpatterns = [
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),
     path("change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
-    path("forgot-password/", ForgotPasswordRequestView.as_view(), name="auth-forgot-password"),
+    path("forgot-password/", ForgotPasswordLinkRequestView.as_view(), name="auth-forgot-password"),
+    path("forgot-password/sms/", SmsPasswordResetRequestView.as_view(), name="auth-forgot-password-sms"),
+    path("reset-password/verify/", ResetPasswordVerifyView.as_view(), name="auth-reset-password-verify"),
+    path("reset-password/", ResetPasswordConfirmView.as_view(), name="auth-reset-password-confirm"),
+    path("reset-password/sms/", SmsPasswordResetConfirmView.as_view(), name="auth-reset-password-sms"),
+    path("profile/email-change/", ProfileEmailChangeRequestView.as_view(), name="auth-profile-email-change"),
+    path("profile/email-change/confirm/", ProfileEmailChangeConfirmView.as_view(), name="auth-profile-email-confirm"),
+    path("users/<uuid:student_id>/admin-reset-link/", AdminAssistedStudentResetView.as_view(), name="auth-admin-student-reset"),
     path("users/", AdminUserManagementView.as_view(), name="admin-users-list"),
     path("users/<uuid:user_id>/", AdminUserManagementView.as_view(), name="admin-users-detail"),
     path("users/<uuid:student_id>/revoke-sessions/", RevokeStudentSessionsView.as_view(), name="auth-revoke-student-sessions"),

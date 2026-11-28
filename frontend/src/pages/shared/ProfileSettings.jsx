@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Save, LogOut } from 'lucide-react';
+import { Lock, Save, LogOut, Mail, Eye, EyeOff } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -24,6 +24,9 @@ const ProfileSettings = () => {
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSaveProfile = async (e) => {
@@ -48,6 +51,10 @@ const ProfileSettings = () => {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      addToast('New password and confirmation do not match.', 'error');
+      return;
+    }
     try {
       await api.post('/auth/change-password/', {
         current_password: currentPassword,
@@ -55,9 +62,21 @@ const ProfileSettings = () => {
       });
       setCurrentPassword('');
       setNewPassword('');
-      addToast('Password changed successfully!', 'success');
+      setConfirmPassword('');
+      addToast('Password changed! Other active sessions were signed out.', 'success');
     } catch (err) {
       addToast(err.response?.data?.error || 'Could not update password.', 'error');
+    }
+  };
+
+  const handleRequestEmailChange = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/auth/profile/email-change/', { new_email: newEmail });
+      setNewEmail('');
+      addToast(res.data?.message || 'Confirmation link sent to your new email.', 'success');
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Could not request email change.', 'error');
     }
   };
 
@@ -184,15 +203,25 @@ const ProfileSettings = () => {
 
       {/* Password Update */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4">
-        <h3 className="text-base font-extrabold text-[#061430] flex items-center gap-2">
-          <Lock className="w-4 h-4 text-red-600" />
-          <span>Update Account Password</span>
-        </h3>
-        <form onSubmit={handleChangePassword} className="grid sm:grid-cols-3 gap-4 items-end">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-[#061430] flex items-center gap-2">
+            <Lock className="w-4 h-4 text-red-600" />
+            <span>Change Password</span>
+          </h3>
+          <button
+            type="button"
+            onClick={() => setShowPw((v) => !v)}
+            className="text-xs font-bold text-blue-700 inline-flex items-center gap-1 cursor-pointer"
+          >
+            {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            <span>{showPw ? 'Hide' : 'Show'}</span>
+          </button>
+        </div>
+        <form onSubmit={handleChangePassword} className="grid sm:grid-cols-4 gap-4 items-end">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Current Password</label>
             <input
-              type="password"
+              type={showPw ? 'text' : 'password'}
               required
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -201,10 +230,10 @@ const ProfileSettings = () => {
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              New Password (Min 8 chars)
+              New Password (8+ chars)
             </label>
             <input
-              type="password"
+              type={showPw ? 'text' : 'password'}
               required
               minLength={8}
               value={newPassword}
@@ -212,11 +241,53 @@ const ProfileSettings = () => {
               className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-blue-600"
             />
           </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Confirm New Password
+            </label>
+            <input
+              type={showPw ? 'text' : 'password'}
+              required
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-blue-600"
+            />
+          </div>
           <button
             type="submit"
-            className="py-2.5 px-4 rounded-xl bg-[#061430] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm transition cursor-pointer"
+            className="min-h-[42px] py-2.5 px-4 rounded-xl bg-[#061430] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm transition cursor-pointer"
           >
             Change Password
+          </button>
+        </form>
+      </div>
+
+      {/* Email Change (with verification sent to NEW address) */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4">
+        <h3 className="text-base font-extrabold text-[#061430] flex items-center gap-2">
+          <Mail className="w-4 h-4 text-blue-700" />
+          <span>Update Email Address</span>
+        </h3>
+        <form onSubmit={handleRequestEmailChange} className="grid sm:grid-cols-3 gap-4 items-end">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              New Email Address (confirmation link will be sent here)
+            </label>
+            <input
+              type="email"
+              required
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="new.email@example.com"
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-blue-600"
+            />
+          </div>
+          <button
+            type="submit"
+            className="min-h-[42px] py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm transition cursor-pointer"
+          >
+            Send Confirmation Link
           </button>
         </form>
       </div>
