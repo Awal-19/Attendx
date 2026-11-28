@@ -289,6 +289,25 @@ class ProfileView(APIView):
         user = request.user
         data = request.data
 
+        if user.role == "STUDENT":
+            disallowed = [k for k in data.keys() if k != "phone_number"]
+            if disallowed:
+                return Response(
+                    {
+                        "error": (
+                            "Student profile details are locked and cannot be modified. "
+                            f"Rejected field(s): {', '.join(disallowed)}."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                {
+                    "error": "Phone number updates require 6-digit SMS verification via /api/auth/profile/phone/request/."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         avatar_url = (data.get("avatar_url", user.avatar_url) or "").strip()
         if avatar_url and not (avatar_url.startswith("https://") or avatar_url.startswith("/images/")):
             return Response(

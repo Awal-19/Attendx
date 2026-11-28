@@ -181,3 +181,81 @@ class PasswordResetAndChangeTests(APITestCase):
             ).exists()
         )
 
+    def test_student_profile_locked_and_sms_phone_update(self):
+        stu_login = self.client.post(
+            "/api/auth/student/login/",
+            {"identifier": "PS/CSC/24/0159", "password": "OldPassword123!"},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {stu_login.data['tokens']['access']}")
+
+        # 1. Attempting to edit locked fields via PUT /api/auth/profile/ is rejected (400)
+        for payload in [
+            {"full_name": "Hacked Name"},
+            {"index_number": "PS/CSC/24/9999"},
+            {"institution": "Other University"},
+            {"email": "hacker@example.com"},
+            {"role": "ADMIN"},
+        ]:
+            res = self.client.put("/api/auth/profile/", payload, format="json")
+            self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.full_name, "Kwame Boateng")
+        self.assertEqual(self.student.email, "k.boateng@stu.ucc.edu.gh")
+        self.assertEqual(self.student.role, "STUDENT")
+
+        # 2. Student cannot request email change (403)
+        em_res = self.client.post(
+            "/api/auth/profile/email-change/",
+            {"new_email": "other@example.com"},
+            format="json",
+        )
+        self.assertEqual(em_res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 3. Invalid phone rejected; valid +233 phone normalized and verified via 6-digit SMS OTP
+        bad_phone = self.client.post(
+            "/api/auth/profile/phone/request/",
+            {"phone_number": "12345"},
+            format="json",
+        )
+        self.assertEqual(bad_phone.status_code, status.HTTP_400_BAD_REQUEST)
+
+        mock_sms = patch("accounts.phone_views.get_sms_provider").start()
+        mock_mailer = patch("accounts.phone_views.get_email_provider").start()
+        try:
+            req_phone = self.client.post(
+                "/api/auth/profile/phone/request/",
+                {"phone_number": "+233 54 987 6543"},
+                format="json",
+            )
+            self.assertEqual(req_phone.status_code, status.HTTP_200_OK)
+            sms_msg = mock_sms.return_value.send_sms.call_args[0][1]
+            code = "".join(ch for ch in sms_msg.split(":")[1].split(".")[0] if ch.isdigit())
+
+            conf_phone = self.client.post(
+                "/api/auth/profile/phone/confirm/",
+                {"code": code},
+                format="json",
+            )
+            self.assertEqual(conf_phone.status_code, status.HTTP_200_OK)
+            self.student.refresh_from_db()
+            self.assertEqual(self.student.phone_number, "0549876543")
+            self.assertEqual(mock_mailer.return_value.send_html.call_count, 1)
+        finally:
+            patch.stopall()
+
+        # 4. Lecturer cannot edit student's locked fields (403)
+        lec_login = self.client.post(
+            "/api/auth/lecturer/login/",
+            {"identifier": "lecturer@ucc.edu.gh", "password": "LecturerPassword123!"},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {lec_login.data['tokens']['access']}")
+        lec_edit = self.client.patch(
+            f"/api/students/{self.student.id}/",
+            {"full_name": "Changed By Lecturer"},
+            format="json",
+        )
+        self.assertEqual(lec_edit.status_code, status.HTTP_403_FORBIDDEN)
+

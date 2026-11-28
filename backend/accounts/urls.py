@@ -26,6 +26,11 @@ from .password_reset_views import (
     ProfileEmailChangeRequestView,
     ProfileEmailChangeConfirmView,
 )
+from .phone_views import (
+    StudentPhoneChangeRequestView,
+    StudentPhoneChangeConfirmView,
+    ReportIncorrectRosterDetailsView,
+)
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="auth-register"),
@@ -38,6 +43,9 @@ urlpatterns = [
     path("token/refresh/", CookieTokenRefreshView.as_view(), name="auth-token-refresh"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),
+    path("profile/phone/request/", StudentPhoneChangeRequestView.as_view(), name="auth-profile-phone-request"),
+    path("profile/phone/confirm/", StudentPhoneChangeConfirmView.as_view(), name="auth-profile-phone-confirm"),
+    path("profile/report-issue/", ReportIncorrectRosterDetailsView.as_view(), name="auth-profile-report-issue"),
     path("change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
     path("forgot-password/", ForgotPasswordLinkRequestView.as_view(), name="auth-forgot-password"),
     path("forgot-password/sms/", SmsPasswordResetRequestView.as_view(), name="auth-forgot-password-sms"),

@@ -440,6 +440,13 @@ class ProfileEmailChangeRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        if request.user.role == "STUDENT":
+            return Response(
+                {
+                    "error": "Students cannot change their email address. Contact the department administrator."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         new_email = (request.data.get("new_email") or "").strip().lower()
         if not new_email or "@" not in new_email:
             return Response(

@@ -275,8 +275,22 @@ class StudentManagementDetailView(APIView):
 
     @transaction.atomic
     def patch(self, request, user_id):
+        from accounts.messaging_service import get_email_provider
+        from accounts.security_service import record_security_audit
+
         target = get_object_or_404(User, id=user_id, role="STUDENT")
         data = request.data
+        reason = (data.get("reason") or "Admin roster correction").strip()[:250]
+        old_email = target.email
+        new_email = (data.get("email") or "").strip().lower()
+
+        if new_email and new_email != old_email:
+            if User.objects.filter(email=new_email).exclude(id=target.id).exists():
+                return Response(
+                    {"error": "Another account already uses that email address."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            target.email = new_email
 
         if "full_name" in data and data["full_name"].strip():
             target.full_name = data["full_name"].strip()
@@ -334,6 +348,35 @@ class StudentManagementDetailView(APIView):
                     academic_level=sp.academic_level,
                     programme=sp.programme,
                 )
+
+        record_security_audit(
+            action="PROFILE_UPDATED",
+            description=f"Admin updated student record ({target.email}). Reason: {reason}",
+            actor=request.user,
+            affected_model="User",
+            affected_id=target.id,
+            request=request,
+        )
+
+        if new_email and new_email != old_email:
+            mailer = get_email_provider()
+            for recipient_addr in (old_email, new_email):
+                if recipient_addr and not recipient_addr.endswith("@pending.ucc.local"):
+                    mailer.send_html(
+                        recipient_addr,
+                        "AttendX UCC – Student Email Updated by Administrator",
+                        (
+                            f"<p>Hello {target.full_name},</p>"
+                            f"<p>Your AttendX student email was updated from <strong>{old_email}</strong> "
+                            f"to <strong>{new_email}</strong> by an administrator.</p>"
+                            f"<p>Reason: {reason}</p>"
+                        ),
+                        (
+                            f"Hello {target.full_name},\n\n"
+                            f"Your AttendX student email was updated from {old_email} to {new_email} "
+                            f"by an administrator.\nReason: {reason}\n"
+                        ),
+                    )
 
         return Response(
             {
