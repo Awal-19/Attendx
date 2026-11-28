@@ -1,6 +1,17 @@
+import re
 import uuid
 from django.db import models
 from django.conf import settings
+
+
+def normalize_course_code(raw: str) -> str:
+    """
+    Normalizes a course code to uppercase with a single space between prefix and digits,
+    e.g., 'csc  101', 'CSC101', ' csc-101 ' -> 'CSC 101'.
+    """
+    cleaned = re.sub(r"[\s\-_]+", " ", (raw or "").strip().upper())
+    cleaned = re.sub(r"^([A-Z]{2,6})\s*(\d{2,4}[A-Z]?)$", r"\1 \2", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 class Department(models.Model):
@@ -93,6 +104,58 @@ class Semester(models.Model):
         return f"{self.academic_year.name} - {self.name}"
 
 
+class CourseCatalog(models.Model):
+    """Official UCC Course Catalog (Source of Truth for course codes, titles, credits, and levels)."""
+
+    LEVEL_CHOICES = (
+        ("100", "Level 100"),
+        ("200", "Level 200"),
+        ("300", "Level 300"),
+        ("400", "Level 400"),
+        ("500", "Level 500"),
+        ("600", "Level 600"),
+    )
+    SEMESTER_CHOICES = (
+        (1, "Semester 1"),
+        (2, "Semester 2"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    course_code = models.CharField(max_length=30, unique=True, db_index=True)
+    course_title = models.CharField(max_length=200)
+    credits = models.PositiveSmallIntegerField(default=3)
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default="100", db_index=True)
+    semester = models.PositiveSmallIntegerField(choices=SEMESTER_CHOICES, default=1)
+    department = models.ForeignKey(
+        Department, on_delete=models.CASCADE, related_name="catalog_courses"
+    )
+    programme = models.ForeignKey(
+        Programme,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="catalog_courses",
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "courses_catalog"
+        ordering = ["course_code"]
+        indexes = [
+            models.Index(fields=["level", "semester", "is_active"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.course_code:
+            self.course_code = normalize_course_code(self.course_code)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.course_code} - {self.course_title}"
+
+
 class Course(models.Model):
     LEVEL_CHOICES = (
         ("100", "Level 100"),
@@ -103,6 +166,13 @@ class Course(models.Model):
         ("600", "Level 600"),
     )
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    catalog_entry = models.ForeignKey(
+        CourseCatalog,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="offerings",
+    )
     code = models.CharField(max_length=30, unique=True, db_index=True)
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, default="")

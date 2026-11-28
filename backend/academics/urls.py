@@ -18,6 +18,12 @@ from .timetable_views import (
     ScheduleChangeRequestListCreateView,
     ScheduleChangeRequestDetailView,
 )
+from .catalog_views import (
+    CourseCatalogListCreateView,
+    CourseCatalogDetailView,
+    CourseCatalogUploadCSVView,
+    CourseCatalogRequestView,
+)
 
 urlpatterns = [
     path("departments/", DepartmentListCreateView.as_view(), name="department-list"),
@@ -35,5 +41,9 @@ urlpatterns = [
     path("timetable/next/", NextUpcomingLectureView.as_view(), name="timetable-next"),
     path("schedule-requests/", ScheduleChangeRequestListCreateView.as_view(), name="schedule-request-list"),
     path("schedule-requests/<uuid:pk>/", ScheduleChangeRequestDetailView.as_view(), name="schedule-request-detail"),
+    path("catalog/", CourseCatalogListCreateView.as_view(), name="course-catalog-list"),
+    path("catalog/upload/", CourseCatalogUploadCSVView.as_view(), name="course-catalog-upload"),
+    path("catalog/request/", CourseCatalogRequestView.as_view(), name="course-catalog-request"),
+    path("catalog/<uuid:pk>/", CourseCatalogDetailView.as_view(), name="course-catalog-detail"),
 ]
 

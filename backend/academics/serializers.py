@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Department, Programme, AcademicYear, Semester, Course, CourseEnrollment
+from .models import Department, Programme, AcademicYear, Semester, CourseCatalog, Course, CourseEnrollment
 from accounts.models import User
 
 
@@ -86,7 +86,38 @@ class SemesterSerializer(serializers.ModelSerializer):
         ]
 
 
+class CourseCatalogSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source="department.name", read_only=True)
+    department_code = serializers.CharField(source="department.code", read_only=True)
+    programme_name = serializers.CharField(source="programme.name", read_only=True, allow_null=True)
+
+    class Meta:
+        model = CourseCatalog
+        fields = [
+            "id",
+            "course_code",
+            "course_title",
+            "credits",
+            "level",
+            "semester",
+            "department",
+            "department_name",
+            "department_code",
+            "programme",
+            "programme_name",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
 class CourseSerializer(serializers.ModelSerializer):
+    catalog_entry = serializers.PrimaryKeyRelatedField(
+        queryset=CourseCatalog.objects.filter(is_active=True), required=False, allow_null=True
+    )
+    code = serializers.CharField(required=False, allow_blank=True)
+    title = serializers.CharField(required=False, allow_blank=True)
     department = serializers.PrimaryKeyRelatedField(
         queryset=Department.objects.all(), required=False, allow_null=True
     )
@@ -106,6 +137,7 @@ class CourseSerializer(serializers.ModelSerializer):
         model = Course
         fields = [
             "id",
+            "catalog_entry",
             "code",
             "title",
             "description",

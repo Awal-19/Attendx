@@ -1,7 +1,8 @@
 from rest_framework import generics, status, permissions
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from .models import Department, Programme, AcademicYear, Semester, Course, CourseEnrollment
 from .serializers import (
@@ -136,7 +137,7 @@ class CourseListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
         qs = Course.objects.select_related(
-            "department", "programme", "lecturer", "semester__academic_year"
+            "catalog_entry", "department", "programme", "lecturer", "semester__academic_year"
         ).all()
 
         mine_only = self.request.query_params.get("mine", "").lower() in ("true", "1")
@@ -149,13 +150,21 @@ class CourseListCreateView(generics.ListCreateAPIView):
                 qs = qs.filter(lecturer=user)
             elif user.role == "STUDENT":
                 qs = qs.filter(enrollments__student=user, enrollments__status="ENROLLED")
+        elif user.is_authenticated and user.role == "STUDENT":
+            qs = qs.filter(is_active=True)
+            if hasattr(user, "student_profile"):
+                sp = user.student_profile
+                if sp.programme_id:
+                    qs = qs.filter(Q(programme_id=sp.programme_id) | Q(programme__isnull=True))
+                if sp.academic_level:
+                    qs = qs.filter(level=sp.academic_level)
 
         if department_id:
             qs = qs.filter(department_id=department_id)
         if level:
             qs = qs.filter(level=level)
         if search:
-            qs = qs.filter(code__icontains=search) | qs.filter(title__icontains=search)
+            qs = qs.filter(Q(code__icontains=search) | Q(title__icontains=search))
 
         return qs.distinct()
 
@@ -166,15 +175,38 @@ class CourseListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         user = self.request.user
+        catalog_entry = serializer.validated_data.get("catalog_entry")
+        if user.role == "LECTURER" and not catalog_entry:
+            raise ValidationError(
+                {"catalog_entry": "Lecturers must select an official course from the Course Catalog."}
+            )
+
         current_semester = Semester.objects.filter(is_current=True).first()
         kwargs = {}
         if not serializer.validated_data.get("semester") and current_semester:
             kwargs["semester"] = current_semester
         if user.role == "LECTURER" and not serializer.validated_data.get("lecturer"):
             kwargs["lecturer"] = user
+
+        if catalog_entry:
+            kwargs["code"] = catalog_entry.course_code
+            kwargs["title"] = catalog_entry.course_title
+            kwargs["credit_hours"] = catalog_entry.credits
+            kwargs["level"] = catalog_entry.level
+            kwargs["department"] = catalog_entry.department
+            if catalog_entry.programme_id and not serializer.validated_data.get("programme"):
+                kwargs["programme"] = catalog_entry.programme
+        else:
+            code = (serializer.validated_data.get("code") or "").strip()
+            title = (serializer.validated_data.get("title") or "").strip()
+            if not code or not title:
+                raise ValidationError(
+                    {"detail": "Provide a catalog_entry or both code and title."}
+                )
+
         if self.request.user.role == "DEPT_ADMIN" and self.request.user.assigned_department_id:
             kwargs["department_id"] = self.request.user.assigned_department_id
-        elif not serializer.validated_data.get("department"):
+        elif "department" not in kwargs and not serializer.validated_data.get("department"):
             dept = None
             if hasattr(user, "lecturer_profile") and user.lecturer_profile.department:
                 dept = user.lecturer_profile.department
@@ -188,7 +220,8 @@ class CourseListCreateView(generics.ListCreateAPIView):
                 )
             kwargs["department"] = dept
         elif user.role == "DEPT_ADMIN":
-            _assert_dept_scope(user, serializer.validated_data["department"].id)
+            dept_id = kwargs.get("department").id if kwargs.get("department") else serializer.validated_data["department"].id
+            _assert_dept_scope(user, dept_id)
         course = serializer.save(**kwargs)
         record_security_audit(
             action="COURSE_MODIFIED",
