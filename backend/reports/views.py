@@ -175,10 +175,15 @@ class AttendanceReportSummaryView(APIView):
                 c.attendance_sessions.exclude(status="CANCELLED"), request, date_field="start_time"
             )
             sess_count = sessions.count()
-            attended = AttendanceRecord.objects.filter(
+            attended_qs = AttendanceRecord.objects.filter(
                 session__in=sessions, status__in=["PRESENT", "LATE", "EXCUSED"]
-            ).count()
-            expected = enrolled * sess_count
+            )
+            if request.user.role == "STUDENT":
+                attended = attended_qs.filter(student=request.user).count()
+                expected = sess_count
+            else:
+                attended = attended_qs.count()
+                expected = enrolled * sess_count
             rate = round((attended / expected) * 100, 1) if expected > 0 else 0.0
             course_analytics.append(
                 {
@@ -187,7 +192,7 @@ class AttendanceReportSummaryView(APIView):
                     "title": c.title,
                     "department": c.department.code if c.department else "UCC",
                     "lecturer": c.lecturer.full_name if c.lecturer else "Unassigned",
-                    "enrolled_students": enrolled,
+                    "enrolled_students": 1 if request.user.role == "STUDENT" else enrolled,
                     "sessions_held": sess_count,
                     "total_checkins": attended,
                     "absent_count": max(expected - attended, 0),

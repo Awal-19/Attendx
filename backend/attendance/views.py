@@ -207,6 +207,19 @@ class AttendanceSessionDetailView(APIView):
             AttendanceSession.objects.select_related("course__department", "lecturer"),
             pk=pk,
         )
+        if request.user.role == "STUDENT":
+            is_enrolled = CourseEnrollment.objects.filter(
+                student=request.user, course=session.course, status="ENROLLED"
+            ).exists()
+            if not is_enrolled:
+                return Response(
+                    {"error": "You are not enrolled in this course."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif request.user.role == "LECTURER":
+            auth_err = _check_session_ownership(request.user, session)
+            if auth_err is not None:
+                return auth_err
         session.check_and_expire()
         serializer = AttendanceSessionSerializer(session, context={"request": request})
         return Response(serializer.data)

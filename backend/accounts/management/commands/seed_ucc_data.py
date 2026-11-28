@@ -161,7 +161,10 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
-        admin_user.set_password("awal0246")
+        import os
+        import secrets
+        admin_pw = os.getenv("SEED_ADMIN_PASSWORD") or secrets.token_urlsafe(16)
+        admin_user.set_password(admin_pw)
         admin_user.is_staff = True
         admin_user.is_superuser = True
         admin_user.is_active = True
@@ -209,7 +212,9 @@ class Command(BaseCommand):
                 },
             )
             if l_created:
-                l_user.set_password("Lecturer@12345")
+                import os
+                import secrets
+                l_user.set_password(os.getenv("SEED_LECTURER_PASSWORD") or secrets.token_urlsafe(16))
                 l_user.save()
             LecturerProfile.objects.update_or_create(
                 user=l_user,
@@ -371,7 +376,9 @@ class Command(BaseCommand):
                 },
             )
             if s_created:
-                s_user.set_password("Student@12345")
+                import os
+                import secrets
+                s_user.set_password(os.getenv("SEED_STUDENT_PASSWORD") or secrets.token_urlsafe(16))
                 s_user.save()
             StudentProfile.objects.update_or_create(
                 user=s_user,

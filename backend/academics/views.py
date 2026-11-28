@@ -254,6 +254,16 @@ class CourseStudentsEnrolledView(APIView):
 
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
+        if request.user.role == "STUDENT":
+            return Response(
+                {"error": "Students cannot view class-wide enrolled student rosters."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if request.user.role == "LECTURER" and course.lecturer_id != request.user.id:
+            return Response(
+                {"error": "You are not assigned as the lecturer for this course."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         enrollments = CourseEnrollment.objects.filter(
             course=course, status="ENROLLED"
         ).select_related(

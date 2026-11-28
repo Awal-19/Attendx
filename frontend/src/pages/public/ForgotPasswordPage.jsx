@@ -29,10 +29,10 @@ const ForgotPasswordPage = () => {
     try {
       await api.post('/auth/forgot-password/', { email });
       setStep(2);
-      addToast('Account verified. Enter your Index Number or Staff ID to set a new password.', 'info');
+      addToast('If an account exists for that email, a 6-digit reset code has been sent.', 'info');
     } catch (err) {
       addToast(
-        err.response?.data?.error || 'No account found with that university email.',
+        err.response?.data?.error || 'Could not process password reset request.',
         'error'
       );
     } finally {
@@ -46,14 +46,14 @@ const ForgotPasswordPage = () => {
     try {
       await api.post('/auth/forgot-password/', {
         email,
-        verification_id: verificationId,
+        reset_code: verificationId,
         new_password: newPassword,
       });
       addToast('Password reset successful! You can now sign in.', 'success');
       navigate(returnLoginPath);
     } catch (err) {
       addToast(
-        err.response?.data?.error || 'Verification failed. Check your Index Number / Staff ID.',
+        err.response?.data?.error || 'Verification failed. Check your 6-digit reset code.',
         'error'
       );
     } finally {
@@ -109,18 +109,18 @@ const ForgotPasswordPage = () => {
             <form onSubmit={handleReset} className="space-y-4">
               <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-700/40 text-xs text-emerald-200 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Account found for {email}</span>
+                <span>Reset code sent to {email} (if registered)</span>
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Student Index Number or Staff ID
+                  6-Digit Reset Code
                 </label>
                 <input
                   type="text"
                   required
                   value={verificationId}
-                  onChange={(e) => setVerificationId(e.target.value.toUpperCase())}
-                  placeholder="e.g. PS/CSC/22/0041 or UCC/STAFF/1042"
+                  onChange={(e) => setVerificationId(e.target.value.trim())}
+                  placeholder="Enter 6-digit code from your email"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-indigo-500"
                 />
               </div>

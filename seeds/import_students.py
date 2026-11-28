@@ -239,7 +239,7 @@ def run_import(
                 test_user = User.objects.create_user(
                     email="michael.asigbey@stu.ucc.edu.gh",
                     full_name="Michael Asigbey",
-                    password="TestStudent#2026",
+                    password=os.getenv("SEED_STUDENT_PASSWORD") or secrets.token_urlsafe(16),
                     role="STUDENT",
                     phone_number="0500000159",
                 )

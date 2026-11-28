@@ -59,7 +59,12 @@ const RoleLoginShell = ({
   const [searchParams] = useSearchParams();
   const rawNext = searchParams.get('next') || '';
   const safeNext =
-    rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('://')
+    rawNext &&
+    rawNext.startsWith('/') &&
+    !rawNext.startsWith('//') &&
+    !rawNext.startsWith('/\\') &&
+    !rawNext.includes('\\') &&
+    !rawNext.includes('://')
       ? rawNext
       : null;
 

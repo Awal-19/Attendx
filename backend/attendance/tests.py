@@ -378,4 +378,42 @@ class AttendXFullSystemTestSuite(APITestCase):
             self.assertEqual(dup_res.status_code, status.HTTP_409_CONFLICT)
             self.assertTrue(dup_res.data["already_marked"])
 
+    def test_06_security_hardening_checks(self):
+        # 1. Public lecturer registration is blocked (403)
+        lec_reg = self.client.post(
+            "/api/auth/register/",
+            {
+                "full_name": "Fake Lecturer",
+                "email": "fake.lecturer@ucc.edu.gh",
+                "password": "StrongPassword123!",
+                "role": "LECTURER",
+            },
+            format="json",
+        )
+        self.assertEqual(lec_reg.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 2. Password reset does not enumerate unknown emails (returns generic 200)
+        fp_unknown = self.client.post(
+            "/api/auth/forgot-password/",
+            {"email": "nonexistent@ucc.edu.gh"},
+            format="json",
+        )
+        self.assertEqual(fp_unknown.status_code, status.HTTP_200_OK)
+
+        # 3. Student IDOR checks: cannot list course students or view unenrolled session
+        self.authenticate_as("lecturer@ucc.edu.gh", "LecturerPassword123!")
+        unreg_sess = self.client.post(
+            "/api/attendance/sessions/",
+            {"course": str(self.unregistered_course.id), "title": "Private Session"},
+            format="json",
+        )
+        unreg_sess_id = unreg_sess.data["session"]["id"]
+
+        self.authenticate_as("student1@stu.ucc.edu.gh", "StudentPassword123!")
+        roster_res = self.client.get(f"/api/courses/{self.course.id}/students/")
+        self.assertEqual(roster_res.status_code, status.HTTP_403_FORBIDDEN)
+
+        sess_res = self.client.get(f"/api/attendance/sessions/{unreg_sess_id}/")
+        self.assertEqual(sess_res.status_code, status.HTTP_403_FORBIDDEN)
+
 

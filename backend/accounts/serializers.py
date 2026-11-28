@@ -128,7 +128,7 @@ class RegisterSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=180)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
-    role = serializers.ChoiceField(choices=["STUDENT", "LECTURER"], default="STUDENT")
+    role = serializers.ChoiceField(choices=["STUDENT"], default="STUDENT")
     phone_number = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
     institution = serializers.CharField(
         max_length=180, required=False, default="University of Cape Coast (UCC)"

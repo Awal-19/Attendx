@@ -186,7 +186,8 @@ class StudentManagementListCreateView(APIView):
         full_name = (data.get("full_name") or "").strip()
         index_number = (data.get("index_number") or "").strip().upper()
         email = (data.get("email") or "").strip().lower()
-        password = data.get("password") or "Student@12345"
+        import secrets
+        password = data.get("password") or secrets.token_urlsafe(14)
         academic_level = str(data.get("academic_level") or "300")
         phone_number = (data.get("phone_number") or "").strip()
 

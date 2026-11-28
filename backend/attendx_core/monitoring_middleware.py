@@ -10,6 +10,32 @@ _LATENCIES_MS = deque(maxlen=250)
 _RECENT_ERRORS = deque(maxlen=25)
 
 
+class SecurityHeadersMiddleware:
+    """Adds CSP, Referrer-Policy, and Permissions-Policy headers to all HTTP responses."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "img-src 'self' data: blob: https:; "
+            "connect-src 'self' ws: wss: https:; "
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        )
+        response.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.setdefault(
+            "Permissions-Policy",
+            "camera=(self), microphone=(), geolocation=()",
+        )
+        return response
+
+
 class SystemMonitoringMiddleware:
     """Tracks live API response times, request counts, and HTTP 5xx/4xx errors."""
 

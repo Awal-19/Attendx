@@ -59,6 +59,13 @@ class RegisterView(APIView):
         )
 
         role = (request.data.get("role") or "STUDENT").upper()
+        if role != "STUDENT":
+            return Response(
+                {
+                    "error": "Public registration is restricted to students. Lecturer and Administrator accounts must be provisioned by an administrator."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         norm_idx = normalize_index_number(request.data.get("index_number"))
         if role == "STUDENT" and norm_idx:
             if not check_index_rate_limit(norm_idx, "register", max_attempts=8, window_seconds=600):
@@ -282,10 +289,21 @@ class ProfileView(APIView):
         user = request.user
         data = request.data
 
-        user.full_name = data.get("full_name", user.full_name).strip()
-        user.phone_number = data.get("phone_number", user.phone_number).strip()
-        user.avatar_url = data.get("avatar_url", user.avatar_url).strip()
-        user.institution = data.get("institution", user.institution).strip()
+        avatar_url = (data.get("avatar_url", user.avatar_url) or "").strip()
+        if avatar_url and not (avatar_url.startswith("https://") or avatar_url.startswith("/images/")):
+            return Response(
+                {"error": "Avatar URL must use https:// or a local /images/ path."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(avatar_url) > 500:
+            return Response(
+                {"error": "Avatar URL is too long (max 500 characters)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.full_name = data.get("full_name", user.full_name).strip()[:180]
+        user.phone_number = data.get("phone_number", user.phone_number).strip()[:30]
+        user.avatar_url = avatar_url
+        user.institution = data.get("institution", user.institution).strip()[:180]
         user.save()
 
         if user.role == "LECTURER" and hasattr(user, "lecturer_profile"):
@@ -344,6 +362,7 @@ class ChangePasswordView(APIView):
             )
         request.user.set_password(new_password)
         request.user.save()
+        revoke_all_user_sessions(request.user, actor=request.user, request=request)
         record_security_audit(
             action="PASSWORD_CHANGED",
             description="User changed account password.",
@@ -360,9 +379,15 @@ class ForgotPasswordRequestView(APIView):
     throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
+        import secrets
+        from django.conf import settings
+        from django.core.cache import cache
+        from django.core.mail import send_mail
+        from django.contrib.auth.hashers import make_password
+
         email = (request.data.get("email") or "").strip().lower()
         new_password = request.data.get("new_password", "")
-        index_or_staff_id = (request.data.get("verification_id") or "").strip().upper()
+        reset_code = (request.data.get("reset_code") or "").strip()
 
         if not email:
             return Response(
@@ -371,23 +396,33 @@ class ForgotPasswordRequestView(APIView):
             )
 
         user = User.objects.filter(email=email).first()
-        if not user:
-            return Response(
-                {"error": "No account found matching that university email address."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        cache_key = f"pw_reset:{email}"
 
-        if index_or_staff_id and new_password:
-            verified = False
-            if user.role == "STUDENT" and hasattr(user, "student_profile"):
-                verified = user.student_profile.index_number.upper() == index_or_staff_id
-            elif user.role == "LECTURER" and hasattr(user, "lecturer_profile"):
-                verified = user.lecturer_profile.staff_id.upper() == index_or_staff_id
-
-            if not verified:
+        # Step 2: Confirm single-use expiring reset code + update password
+        if reset_code or new_password:
+            if not reset_code or not new_password:
+                return Response(
+                    {"error": "Reset code and new password are both required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            cached = cache.get(cache_key)
+            if not cached or not user:
+                return Response(
+                    {"error": "Invalid or expired password reset code."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if cached.get("attempts", 0) >= 5:
+                cache.delete(cache_key)
+                return Response(
+                    {"error": "Too many failed reset attempts. Request a new code."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            if not check_password(reset_code, cached.get("code_hash", "")):
+                cached["attempts"] = cached.get("attempts", 0) + 1
+                cache.set(cache_key, cached, timeout=600)
                 record_security_audit(
                     action="LOGIN_FAILED",
-                    description="Password reset identity verification failed.",
+                    description="Password reset code verification failed.",
                     actor=user,
                     affected_model="User",
                     affected_id=user.id,
@@ -395,7 +430,7 @@ class ForgotPasswordRequestView(APIView):
                     status="FAILED",
                 )
                 return Response(
-                    {"error": "Verification failed: Index Number / Staff ID does not match our records."},
+                    {"error": "Invalid or expired password reset code."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             try:
@@ -405,12 +440,13 @@ class ForgotPasswordRequestView(APIView):
                     {"error": " ".join(exc.messages)},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            cache.delete(cache_key)
             user.set_password(new_password)
             user.save()
             revoke_all_user_sessions(user, actor=user, request=request)
             record_security_audit(
                 action="PASSWORD_RESET",
-                description="Password reset completed via identity verification.",
+                description="Password reset completed via single-use email token.",
                 actor=user,
                 affected_model="User",
                 affected_id=user.id,
@@ -424,11 +460,31 @@ class ForgotPasswordRequestView(APIView):
             )
             return Response({"message": "Password has been reset successfully. You may now sign in."})
 
+        if user:
+            code = f"{secrets.randbelow(1000000):06d}"
+            cache.set(
+                cache_key,
+                {"code_hash": make_password(code), "attempts": 0},
+                timeout=600,
+            )
+            try:
+                send_mail(
+                    subject="AttendX UCC – Password Reset Verification Code",
+                    message=(
+                        f"Your AttendX password reset code is: {code}\n\n"
+                        "This code expires in 10 minutes and can only be used once. "
+                        "If you did not request this, you can safely ignore this email."
+                    ),
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "AttendX UCC <noreply@ucc.edu.gh>"),
+                    recipient_list=[user.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
+
         return Response(
             {
-                "message": "Account located. Provide your Index Number or Staff ID to complete instant password recovery.",
-                "role": user.role,
-                "email": user.email,
+                "message": "If an account exists for that university email, a 6-digit password reset code has been sent.",
             }
         )
 
